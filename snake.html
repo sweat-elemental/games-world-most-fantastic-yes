@@ -15,7 +15,7 @@
       display: block;
       margin: 40px auto;
       border: 1px solid #fff;
-      background: #fef9e7; /* Canvas background color */
+      background: #784212; /* Canvas background color */
     }
   </style>
 </head>
@@ -42,7 +42,7 @@ let bombFlashColor2      = "black";
 let bombExplosionStage1  = "white";
 let bombExplosionStage2  = "yellow";
 let bombExplosionStage3  = "red";
-let poopParticleColor    = "#663300"; // "brown"
+let poopParticleColor    = "#9c640c"; // "brown"
 
 // -- Poop toggle --
 let enablePoop = true; 
@@ -234,7 +234,7 @@ function update() {
   for (let rock of rocks) {
     for (let sq of rock.squares) {
       if (head.x === sq.x && head.y === sq.y) {
-        endGame("rock");
+        endGame("poor bastard drowned");
         return;
       }
     }
