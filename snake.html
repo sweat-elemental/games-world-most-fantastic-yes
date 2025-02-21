@@ -1,22 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Worm</title>
+  <meta charset="UTF-8">
+  <title>Snake with Segment Digest, Poop Particles & Custom Colors</title>
   <style>
     body {
       background-color: black;
       color: white;
-      margin: 0; 
+      margin: 0;
       padding: 0;
       font-family: Arial, sans-serif;
     }
-    /* Pale yellow (sand-like) background for the canvas */
     canvas {
       display: block;
       margin: 40px auto;
       border: 1px solid #fff;
-      background: #0dd449; /* Light Goldenrod Yellow */
+      background: #0DD449; /* Canvas background color */
     }
   </style>
 </head>
@@ -26,7 +25,7 @@
 
 <script>
 // ---------------------------------------------------
-// GLOBALS & SETUP
+// GLOBAL CONSTANTS & CONFIGURABLES
 // ---------------------------------------------------
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -35,53 +34,151 @@ const gridSize = 20;
 const cols = canvas.width / gridSize;
 const rows = canvas.height / gridSize;
 
-// Snake
+// -- Colors / Appearance --
+let snakeColor           = "lime";
+let rockColor            = "gray";
+let bombFlashColor1      = "white"; 
+let bombFlashColor2      = "black";
+let bombExplosionStage1  = "white";
+let bombExplosionStage2  = "yellow";
+let bombExplosionStage3  = "red";
+let poopParticleColor    = "#663300"; // "brown"
+
+// -- Poop toggle --
+let enablePoop = true; 
+
+// ---------------------------------------------------
+// SNAKE & APPLE
+// ---------------------------------------------------
 let snake = [{ x: 200, y: 200 }];
 let dx = 0, dy = 0; // velocity
-
-// Apple
 let appleX = 0, appleY = 0;
 
-// Rocks
+// ---------------------------------------------------
+// ROCKS
+// ---------------------------------------------------
 let rocks = [];
-const rockCount = 5;
+const rockCount = 5; 
 
-// Bombs
-const baseBombSpawnChance = 0.01; // 1% base chance
+// ---------------------------------------------------
+// BOMBS
+// ---------------------------------------------------
 let bombs = [];
+const baseBombSpawnChance = 0.01; // base 1% chance
+let explosionParticleCount     = 20; 
+let explosionParticleBaseSpeed = 3;  
+let explosionParticleBaseLife  = 10; 
+let explosionParticleBaseSize  = 6;  
 
-// Game Over
+// ---------------------------------------------------
+// DIGEST ANIMATION
+// ---------------------------------------------------
+let digestWaves = []; 
+let frameCount = 0;
+
+const waveExtra = 1;              
+const waveDurationPerSegment = 3; 
+const maxScale = 1.7;            
+const digestScaleDecay = 0.9;  
+
+// ---------------------------------------------------
+// POOP PARTICLES
+// ---------------------------------------------------
+let poopParticles = [];
+
+// For the "lose momentum quickly" effect, 
+// we'll define a velocityDamp for each poop update, e.g. 0.75 => reduce velocity 25% each frame
+const poopVelocityDamp = 0.75; 
+// or set it to 0 if you want them basically static from the start.
+
+// The function that spawns the poo outward from the tail's last direction.
+function spawnPoopFromTail() {
+  if (snake.length === 0) return;
+  const tailIndex = snake.length - 1;
+  const tail = snake[tailIndex];
+
+  // We can figure out the tail's direction by comparing tail with second-last segment
+  // or if that doesn't exist, use (dx, dy).
+  let tailDX = dx, tailDY = dy; // fallback if we don't have a second-last segment
+  if (tailIndex >= 1) {
+    const secondLast = snake[tailIndex - 1];
+    tailDX = tail.x - secondLast.x;
+    tailDY = tail.y - secondLast.y;
+  }
+  // tailDX, tailDY is the direction of the tail movement in px; 
+  // typically it should be ±gridSize. We'll normalize and add a small offset.
+
+  // normalize:
+  let len = Math.sqrt(tailDX * tailDX + tailDY * tailDY);
+  if (len === 0) { len = 1; } // avoid division by zero
+  tailDX /= len;
+  tailDY /= len;
+
+  // e.g. spawn 6 small poop squares
+  const count = 6;
+  for (let i = 0; i < count; i++) {
+    // slight angle offset => ±15 deg for variety
+    let angleOffset = (Math.random() - 0.5) * (Math.PI / 6); // ± ~15 degrees
+    // rotate (tailDX, tailDY) by angleOffset
+    let cosA = Math.cos(angleOffset);
+    let sinA = Math.sin(angleOffset);
+
+    let outX = tailDX * cosA - tailDY * sinA; 
+    let outY = tailDX * sinA + tailDY * cosA;
+    
+    // random speed ~1..2
+    let speed = 2 + Math.random();
+    outX *= speed;
+    outY *= speed;
+
+    poopParticles.push({
+      x: tail.x + gridSize/2, 
+      y: tail.y + gridSize/2,
+      dx: outX,  // outward direction
+      dy: outY, 
+      life: 20   // frames
+    });
+  }
+}
+
+function updatePoopParticles() {
+  for (let i = poopParticles.length - 1; i >= 0; i--) {
+    let p = poopParticles[i];
+    p.life--;
+    
+    // Move
+    p.x += p.dx;
+    p.y += p.dy;
+
+    // Damp velocity => lose momentum quickly
+    p.dx *= poopVelocityDamp;
+    p.dy *= poopVelocityDamp;
+
+    if (p.life <= 0) {
+      poopParticles.splice(i, 1);
+    }
+  }
+}
+
+// ---------------------------------------------------
+// GAME OVER
+// ---------------------------------------------------
 let gameOver = false;
 let causeOfDeath = "";
 let finalLength = 0;
 
 // ---------------------------------------------------
-// EXPLOSION CONFIG
-// ---------------------------------------------------
-let explosionParticleCount     = 20; // number of particles per explosion
-let explosionParticleBaseSpeed = 3;  // base speed (px/frame)
-let explosionParticleBaseLife  = 10; // base lifespan in frames
-let explosionParticleBaseSize  = 6;  // base size (px)
-
-// Utility: ±20% random factor => returns value in [0.8..1.2]
-function randomFactor20() {
-  return 1 + (Math.random() - 0.5) * 0.4;
-}
-
-// ---------------------------------------------------
-// INITIALIZE
+// SETUP & MAIN LOOP
 // ---------------------------------------------------
 document.addEventListener("keydown", handleKey);
 spawnRocks(rockCount);
 spawnApple();
-setInterval(gameLoop, 100); // 10 FPS
+setInterval(gameLoop, 100); // ~10 FPS
 
-// ---------------------------------------------------
-// MAIN LOOP
-// ---------------------------------------------------
 function gameLoop() {
   if (!gameOver) {
     update();
+    frameCount++;
   }
   draw();
 }
@@ -90,11 +187,8 @@ function gameLoop() {
 // UPDATE LOGIC
 // ---------------------------------------------------
 function update() {
-  // Move snake
-  const head = {
-    x: snake[0].x + dx,
-    y: snake[0].y + dy
-  };
+  // 1) Move snake
+  const head = { x: snake[0].x + dx, y: snake[0].y + dy };
 
   // Wrap edges
   if (head.x < 0) head.x = canvas.width - gridSize;
@@ -104,34 +198,39 @@ function update() {
 
   snake.unshift(head);
 
-  // Check apple
+  // 2) Check apple
   if (head.x === appleX && head.y === appleY) {
+    digestWaves.push({ startFrame: frameCount, finished: false });
     spawnApple();
   } else {
     snake.pop();
   }
 
-  // Dynamic bomb chance: 0.01 plus 0.005 per snake segment beyond length 1
+  // 3) Bomb spawn
   const snakeLength = snake.length;
-  const dynamicBombChance = baseBombSpawnChance + (snakeLength - 1) * 0.005;
-
+  const dynamicBombChance = baseBombSpawnChance + 0.005 * (snakeLength - 1);
   if (Math.random() < dynamicBombChance) {
     spawnBomb();
   }
 
-  // Update bombs
+  // 4) Update bombs
   updateBombs();
 
-  // Collisions:
-  // 1) Self collision
+  // 5) Update digest waves
+  updateDigestWaves();
+
+  // 6) Update poop particles
+  updatePoopParticles();
+
+  // 7) Collisions
+  // Self-collision
   for (let i = 1; i < snake.length; i++) {
     if (head.x === snake[i].x && head.y === snake[i].y) {
       endGame("body collision");
       return;
     }
   }
-
-  // 2) Rock collision
+  // Rock collision
   for (let rock of rocks) {
     for (let sq of rock.squares) {
       if (head.x === sq.x && head.y === sq.y) {
@@ -140,14 +239,11 @@ function update() {
       }
     }
   }
-
-  // 3) Bomb "touch to explode"
+  // Bomb "touch => explode"
   for (let bomb of bombs) {
-    // If the bomb is still in flash stage and the snake head is on it,
-    // force the bomb to explode
     if (bomb.stage === "flash" && head.x === bomb.x && head.y === bomb.y) {
       bomb.stage = "explode";
-      bomb.framesLeft = 0; // skip flash
+      bomb.framesLeft = 0;
       destroyRockSquares(bomb.x, bomb.y, 2);
       createExplosionParticles(bomb);
     }
@@ -155,96 +251,139 @@ function update() {
 }
 
 // ---------------------------------------------------
-// APPLE SPAWNING
+// DIGEST WAVE UPDATE
 // ---------------------------------------------------
-function spawnApple() {
-  // Gather all free tiles
-  const freeTiles = [];
-  for (let c = 0; c < cols; c++) {
-    for (let r = 0; r < rows; r++) {
-      const tx = c * gridSize;
-      const ty = r * gridSize;
+function updateDigestWaves() {
+  for (let w of digestWaves) {
+    if (w.finished) continue;
 
-      // skip if rock
-      if (isRockTile(tx, ty)) continue;
-      // skip if snake
-      if (snake.some(seg => seg.x === tx && seg.y === ty)) continue;
+    const waveFrame = frameCount - w.startFrame;
+    const waveLengthInSegments = snake.length + waveExtra;
+    const totalWaveFrames = waveLengthInSegments * waveDurationPerSegment;
 
-      freeTiles.push({ x: tx, y: ty });
-    }
-  }
-
-  if (freeTiles.length === 0) {
-    console.warn("No free tiles for apple!");
-    return;
-  }
-
-  const choice = freeTiles[Math.floor(Math.random() * freeTiles.length)];
-  appleX = choice.x;
-  appleY = choice.y;
-}
-
-// ---------------------------------------------------
-// ROCK SPAWNING
-// ---------------------------------------------------
-function spawnRocks(count) {
-  rocks = [];
-  for (let i = 0; i < count; i++) {
-    let placed = false;
-    const maxAttempts = 200;
-
-    for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
-      const w = 1 + Math.floor(Math.random() * 3);
-      const h = 1 + Math.floor(Math.random() * 3);
-      const xTile = Math.floor(Math.random() * (cols - w));
-      const yTile = Math.floor(Math.random() * (rows - h));
-
-      const squares = [];
-      for (let rx = 0; rx < w; rx++) {
-        for (let ry = 0; ry < h; ry++) {
-          squares.push({
-            x: (xTile + rx) * gridSize,
-            y: (yTile + ry) * gridSize
-          });
-        }
-      }
-
-      // Check conflicts: snake + existing rocks
-      if (squares.some(sq => snake.some(sg => sg.x === sq.x && sg.y === sq.y))) {
-        continue;
-      }
-
-      let conflict = false;
-      for (let rock of rocks) {
-        for (let sq of rock.squares) {
-          if (squares.some(cand => cand.x === sq.x && cand.y === sq.y)) {
-            conflict = true;
-            break;
-          }
-        }
-        if (conflict) break;
-      }
-      if (!conflict) {
-        rocks.push({ squares });
-        placed = true;
+    if (waveFrame >= totalWaveFrames) {
+      // Wave is done
+      w.finished = true;
+      if (enablePoop) {
+        // spawn poop from tail
+        spawnPoopFromTail();
       }
     }
   }
 }
 
-function isRockTile(x, y) {
-  for (let rock of rocks) {
-    for (let sq of rock.squares) {
-      if (sq.x === x && sq.y === y) {
-        return true;
-      }
-    }
+// ---------------------------------------------------
+// DRAW
+// ---------------------------------------------------
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!gameOver) {
+    drawSnakeWithDigest();
+
+    // Apple
+    ctx.fillStyle = "red";
+    ctx.fillRect(appleX, appleY, gridSize, gridSize);
+
+    // Rocks
+    ctx.fillStyle = rockColor;
+    rocks.forEach(rock => {
+      rock.squares.forEach(sq => {
+        ctx.fillRect(sq.x, sq.y, gridSize, gridSize);
+      });
+    });
+
+    drawBombs();
+    drawPoopParticles();
+  } else {
+    drawGameOverScreen();
   }
-  return false;
+}
+
+function drawSnakeWithDigest() {
+  for (let i = 0; i < snake.length; i++) {
+    const seg = snake[i];
+    const scale = getDigestScale(i);
+
+    const segWidth = gridSize * scale;
+    const segHeight = gridSize * scale;
+    const halfW = segWidth / 2;
+    const halfH = segHeight / 2;
+
+    ctx.save();
+    ctx.translate(seg.x + gridSize / 2, seg.y + gridSize / 2);
+    ctx.fillStyle = snakeColor;
+    ctx.fillRect(-halfW, -halfH, segWidth, segHeight);
+    ctx.restore();
+  }
+}
+
+function getDigestScale(segmentIndex) {
+  let scale = 1.0;
+
+  for (let w of digestWaves) {
+    if (w.finished) continue;
+    const waveFrame = frameCount - w.startFrame;
+    const waveLengthInSegments = snake.length + waveExtra;
+    const totalWaveFrames = waveLengthInSegments * waveDurationPerSegment;
+
+    if (waveFrame >= totalWaveFrames) {
+      continue;
+    }
+
+    const segmentFrame = waveFrame - (segmentIndex * waveDurationPerSegment);
+    if (segmentFrame < 0 || segmentFrame >= waveDurationPerSegment) {
+      continue;
+    }
+
+    const frac = segmentFrame / waveDurationPerSegment;
+    const localMaxBulge = maxScale * Math.pow(digestScaleDecay, segmentIndex);
+    const localScale = localMaxBulge + (1.0 - localMaxBulge) * frac;
+    if (localScale > scale) scale = localScale;
+  }
+
+  return scale;
 }
 
 // ---------------------------------------------------
-// BOMB SPAWNING & UPDATING
+// BOMBS
+// ---------------------------------------------------
+function drawBombs() {
+  bombs.forEach(bomb => {
+    if (bomb.stage === "flash") {
+      const totalFlash = 20;
+      const elapsed = totalFlash - bomb.framesLeft;
+      const phase = Math.floor(elapsed / 5);
+      ctx.fillStyle = (phase % 2 === 0) ? bombFlashColor1 : bombFlashColor2;
+      ctx.fillRect(bomb.x, bomb.y, gridSize, gridSize);
+    } else if (bomb.stage === "explode") {
+      bomb.particles.forEach(p => {
+        const fraction = 1 - (p.life / p.maxLife);
+        let color = bombExplosionStage1;
+        if (fraction > 0.66) color = bombExplosionStage3;
+        else if (fraction > 0.33) color = bombExplosionStage2;
+
+        ctx.fillStyle = color;
+        const half = p.size / 2;
+        ctx.fillRect(p.x - half, p.y - half, p.size, p.size);
+      });
+    }
+  });
+}
+
+// ---------------------------------------------------
+// DRAW Poop Particles
+// ---------------------------------------------------
+function drawPoopParticles() {
+  ctx.fillStyle = poopParticleColor;
+  poopParticles.forEach(p => {
+    // small squares
+    ctx.fillRect(p.x - 2, p.y - 2, 8, 8);
+  });
+}
+
+// ---------------------------------------------------
+// BOMBS UTILS
 // ---------------------------------------------------
 function spawnBomb() {
   let bombX, bombY;
@@ -257,16 +396,16 @@ function spawnBomb() {
     tries++;
   } while (
     tries < maxTries &&
-    ( (bombX === appleX && bombY === appleY) ||
-      isRockTile(bombX, bombY) ||
-      snake.some(seg => seg.x === bombX && seg.y === bombY))
+    ((bombX === appleX && bombY === appleY) ||
+     isRockTile(bombX, bombY) ||
+     snake.some(seg => seg.x === bombX && seg.y === bombY))
   );
 
   bombs.push({
     x: bombX,
     y: bombY,
     stage: "flash",
-    framesLeft: 20,
+    framesLeft: 20, 
     particles: []
   });
 }
@@ -274,7 +413,6 @@ function spawnBomb() {
 function updateBombs() {
   for (let i = bombs.length - 1; i >= 0; i--) {
     let bomb = bombs[i];
-
     if (bomb.stage === "flash") {
       bomb.framesLeft--;
       if (bomb.framesLeft <= 0) {
@@ -283,7 +421,6 @@ function updateBombs() {
         createExplosionParticles(bomb);
       }
     } else if (bomb.stage === "explode") {
-      // Update each particle
       for (let p = bomb.particles.length - 1; p >= 0; p--) {
         let part = bomb.particles[p];
         part.life--;
@@ -295,7 +432,7 @@ function updateBombs() {
           continue;
         }
 
-        // check collision with snake
+        // collision with snake
         if (checkParticleCollisionWithSnake(part)) {
           endGame("bomb");
           return;
@@ -326,19 +463,12 @@ function destroyRockSquares(bx, by, radius) {
   }
 }
 
-// Create explosion particles with randomization
 function createExplosionParticles(bomb) {
   bomb.particles = [];
   for (let i = 0; i < explosionParticleCount; i++) {
     const angle = Math.random() * 2 * Math.PI;
-
-    // Speed with ±20% variation
     const speed = explosionParticleBaseSpeed * randomFactor20();
-
-    // Lifespan with ±20% variation
     const maxLife = Math.floor(explosionParticleBaseLife * randomFactor20());
-
-    // Size with ±20% variation
     const size = explosionParticleBaseSize * randomFactor20();
 
     const dx = Math.cos(angle) * speed;
@@ -347,8 +477,7 @@ function createExplosionParticles(bomb) {
     bomb.particles.push({
       x: bomb.x + gridSize / 2,
       y: bomb.y + gridSize / 2,
-      dx,
-      dy,
+      dx, dy,
       life: maxLife,
       maxLife,
       size
@@ -370,55 +499,84 @@ function checkParticleCollisionWithSnake(p) {
 }
 
 // ---------------------------------------------------
-// DRAW
+// ROCK UTILS
 // ---------------------------------------------------
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+function spawnRocks(count) {
+  rocks = [];
+  for (let i = 0; i < count; i++) {
+    let placed = false;
+    const maxAttempts = 200;
 
-  if (!gameOver) {
-    // Snake
-    ctx.fillStyle = "lime";
-    snake.forEach(s => ctx.fillRect(s.x, s.y, gridSize, gridSize));
+    for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
+      const w = 1 + Math.floor(Math.random() * 3);
+      const h = 1 + Math.floor(Math.random() * 3);
+      const xTile = Math.floor(Math.random() * (cols - w));
+      const yTile = Math.floor(Math.random() * (rows - h));
 
-    // Apple
-    ctx.fillStyle = "red";
-    ctx.fillRect(appleX, appleY, gridSize, gridSize);
+      const squares = [];
+      for (let rx = 0; rx < w; rx++) {
+        for (let ry = 0; ry < h; ry++) {
+          squares.push({
+            x: (xTile + rx) * gridSize,
+            y: (yTile + ry) * gridSize
+          });
+        }
+      }
 
-    // Rocks
-    ctx.fillStyle = "gray";
-    rocks.forEach(rock => {
-      rock.squares.forEach(sq => ctx.fillRect(sq.x, sq.y, gridSize, gridSize));
-    });
-
-    // Bombs
-    drawBombs();
-  } else {
-    drawGameOverScreen();
+      // conflict check
+      if (squares.some(sq => snake.some(sg => sg.x === sq.x && sg.y === sq.y))) {
+        continue;
+      }
+      let conflict = false;
+      for (let rock of rocks) {
+        for (let sq of rock.squares) {
+          if (squares.some(c => c.x === sq.x && c.y === sq.y)) {
+            conflict = true;
+            break;
+          }
+        }
+        if (conflict) break;
+      }
+      if (!conflict) {
+        rocks.push({ squares });
+        placed = true;
+      }
+    }
   }
 }
 
-function drawBombs() {
-  bombs.forEach(bomb => {
-    if (bomb.stage === "flash") {
-      // flash black/white every 5 frames
-      const totalFlash = 20;
-      const elapsed = totalFlash - bomb.framesLeft;
-      const phase = Math.floor(elapsed / 5);
-      ctx.fillStyle = (phase % 2 === 0) ? "white" : "black";
-      ctx.fillRect(bomb.x, bomb.y, gridSize, gridSize);
-    } else if (bomb.stage === "explode") {
-      bomb.particles.forEach(p => {
-        const fraction = 1 - (p.life / p.maxLife);
-        let color = "white";
-        if (fraction > 0.66) color = "red";
-        else if (fraction > 0.33) color = "yellow";
-
-        ctx.fillStyle = color;
-        const half = p.size / 2;
-        ctx.fillRect(p.x - half, p.y - half, p.size, p.size);
-      });
+function isRockTile(x, y) {
+  for (let rock of rocks) {
+    for (let sq of rock.squares) {
+      if (sq.x === x && sq.y === y) {
+        return true;
+      }
     }
-  });
+  }
+  return false;
+}
+
+// ---------------------------------------------------
+// SPAWN APPLE
+// ---------------------------------------------------
+function spawnApple() {
+  const freeTiles = [];
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const tx = c * gridSize;
+      const ty = r * gridSize;
+      if (isRockTile(tx, ty)) continue;
+      if (snake.some(seg => seg.x === tx && seg.y === ty)) continue;
+      freeTiles.push({ x: tx, y: ty });
+    }
+  }
+  if (freeTiles.length === 0) {
+    console.warn("No free tiles for apple!");
+    return;
+  }
+  const choice = freeTiles[Math.floor(Math.random() * freeTiles.length)];
+  appleX = choice.x;
+  appleY = choice.y;
 }
 
 // ---------------------------------------------------
@@ -431,7 +589,6 @@ function endGame(reason) {
 }
 
 function drawGameOverScreen() {
-  // Fill the canvas with black for contrast
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -472,14 +629,25 @@ function resetGame() {
   gameOver = false;
   causeOfDeath = "";
   finalLength = 0;
+
   snake = [{ x: 200, y: 200 }];
   dx = 0;
   dy = 0;
   bombs = [];
   rocks = [];
+  digestWaves = [];
+  poopParticles = [];
+  frameCount = 0;
 
   spawnRocks(rockCount);
   spawnApple();
+}
+
+// ---------------------------------------------------
+// RANDOM FACTOR
+// ---------------------------------------------------
+function randomFactor20() {
+  return 1 + (Math.random() - 0.5) * 0.4; // => 0.8..1.2
 }
 </script>
 
