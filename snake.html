@@ -234,7 +234,7 @@ function update() {
   for (let rock of rocks) {
     for (let sq of rock.squares) {
       if (head.x === sq.x && head.y === sq.y) {
-        endGame("puddle (poor bastard drowned)");
+        endGame("poor bastard drowned");
         return;
       }
     }
