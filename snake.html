@@ -117,11 +117,15 @@ function updateApple() {
   let distance = Math.sqrt(dxApple * dxApple + dyApple * dyApple);
 
   // Base chance for apple to move on each update (1%)
-  let moveChance = 0.01;
+  let moveChance = 0.1;
   // Increase chance if snake is near (within 3 grid cells)
-  const nearThreshold = gridSize * 3;
+  const nearThreshold = gridSize * 5;
   if (distance < nearThreshold) {
-    moveChance = 0.05;
+    moveChance = 0.2;
+  }
+  const nearerThreshold = gridSize * 2;
+  if (distance < nearerThreshold) {
+    moveChance = 0.4;
   }
   
   if (Math.random() < moveChance) {
