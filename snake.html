@@ -17,11 +17,36 @@
       border: 1px solid #fff;
       background: #8B4513; /* Canvas background color */
     }
+    /* Pause menu overlay styling */
+    #menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 100;
+    }
+    #menu button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
 <canvas id="gameCanvas" width="400" height="400"></canvas>
+<!-- Pause menu overlay -->
+<div id="menu">
+  <button id="resumeBtn">Resume</button>
+  <button id="exitBtn">Exit</button>
+</div>
 
 <script>
 // ---------------------------------------------------
@@ -52,6 +77,22 @@ let enablePoop = true;
 // ---------------------------------------------------
 let highScore = 0;
 let showScore = true;  // true means the score is shown
+
+// ---------------------------------------------------
+// PAUSE STATE
+// ---------------------------------------------------
+let paused = false;
+const menuDiv = document.getElementById("menu");
+const resumeBtn = document.getElementById("resumeBtn");
+const exitBtn = document.getElementById("exitBtn");
+
+resumeBtn.addEventListener("click", () => {
+  paused = false;
+  menuDiv.style.display = "none";
+});
+exitBtn.addEventListener("click", () => {
+  window.location.href = "index.html";
+});
 
 // ---------------------------------------------------
 // SNAKE & APPLE
@@ -104,7 +145,7 @@ let appleParticleBaseSize = 3;            // Base size of particles
 let appleParticleSizeVariability = 4;     // Additional random size variability
 let appleParticleBaseSpeed = 0;           // Base speed of particles
 let appleParticleSpeedVariability = 5;    // Additional random speed variability
-let appleParticleRedFrequency = 0.65;      // 50% chance red, else white
+let appleParticleRedFrequency = 0.65;     // 65% chance red, else white
 
 // ---------------------------------------------------
 // APPLE MOVEMENT LOGIC
@@ -116,9 +157,9 @@ function updateApple() {
   let dyApple = appleY - head.y;
   let distance = Math.sqrt(dxApple * dxApple + dyApple * dyApple);
 
-  // Base chance for apple to move on each update (1%)
+  // Base chance for apple to move on each update (0.1)
   let moveChance = 0.1;
-  // Increase chance if snake is near (within 3 grid cells)
+  // Increase chance if snake is near (within 5 grid cells)
   const nearThreshold = gridSize * 5;
   if (distance < nearThreshold) {
     moveChance = 0.2;
@@ -281,7 +322,7 @@ spawnApple();
 setInterval(gameLoop, 100); // ~10 FPS
 
 function gameLoop() {
-  if (!gameOver) {
+  if (!gameOver && !paused) {
     update();
     frameCount++;
   }
@@ -379,7 +420,7 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (!gameOver) {
-    // Draw apple particles and poo particles first so they appear beneath the snake.
+    // Draw apple and poo particles beneath the snake.
     drawAppleParticles();
     drawPoopParticles();
 
@@ -411,6 +452,11 @@ function draw() {
   } else {
     drawGameOverScreen();
   }
+  
+  // If game is paused, render the menu overlay.
+  if (paused) {
+    menuDiv.style.display = "flex";
+  }
 }
 
 function drawSnakeWithDigest() {
@@ -421,7 +467,6 @@ function drawSnakeWithDigest() {
     const segHeight = gridSize * scale;
     const halfW = segWidth / 2;
     const halfH = segHeight / 2;
-
     ctx.save();
     ctx.translate(seg.x + gridSize / 2, seg.y + gridSize / 2);
     ctx.fillStyle = snakeColor;
@@ -684,6 +729,9 @@ function drawGameOverScreen() {
   ctx.fillText("Press Enter/E to Restart", canvas.width / 2, canvas.height / 2 + 100);
 }
 
+// ---------------------------------------------------
+// KEY HANDLING
+// ---------------------------------------------------
 function handleKey(e) {
   // Toggle score display with Tab
   if (e.key === "Tab") {
@@ -692,7 +740,15 @@ function handleKey(e) {
     return;
   }
   
-  if (!gameOver) {
+  // If Escape is pressed, show the pause menu and pause the game
+  if (e.key === "Escape") {
+    paused = true;
+    menuDiv.style.display = "flex";
+    e.preventDefault();
+    return;
+  }
+  
+  if (!gameOver && !paused) {
     switch(e.key) {
       case "ArrowUp":
       case "w":
@@ -731,6 +787,8 @@ function resetGame() {
   frameCount = 0;
   spawnRocks(rockCount);
   spawnApple();
+  paused = false;
+  menuDiv.style.display = "none";
 }
 
 // ---------------------------------------------------
