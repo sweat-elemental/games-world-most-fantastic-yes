@@ -48,9 +48,10 @@ let poopParticleColor    = "Maroon"; // "brown"
 let enablePoop = true; 
 
 // ---------------------------------------------------
-// HIGH SCORE
+// HIGH SCORE & SCORE DISPLAY TOGGLE
 // ---------------------------------------------------
 let highScore = 0;
+let showScore = true;  // true means the score is shown
 
 // ---------------------------------------------------
 // SNAKE & APPLE
@@ -276,12 +277,14 @@ function draw() {
     drawBombs();
     drawPoopParticles();
 
-    // Draw current score and high score in the top-left corner
-    ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText("Score: " + snake.length, 10, 20);
-    ctx.fillText("High Score: " + highScore, 10, 40);
+    // Draw current score and high score if showScore is true
+    if (showScore) {
+      ctx.fillStyle = "white";
+      ctx.font = "16px Arial";
+      ctx.textAlign = "left";
+      ctx.fillText("Score: " + snake.length, 10, 20);
+      ctx.fillText("High Score: " + highScore, 10, 40);
+    }
   } else {
     drawGameOverScreen();
   }
@@ -567,6 +570,13 @@ function drawGameOverScreen() {
 }
 
 function handleKey(e) {
+  // Toggle score display with Tab
+  if (e.key === "Tab") {
+    showScore = !showScore;
+    e.preventDefault();
+    return;
+  }
+  
   if (!gameOver) {
     switch(e.key) {
       case "ArrowUp":
