@@ -91,11 +91,67 @@ const digestScaleDecay = 0.9;
 // POOP PARTICLES
 // ---------------------------------------------------
 let poopParticles = [];
+const poopVelocityDamp = 0.75; // for damping poop movement
 
-// For the "lose momentum quickly" effect
-const poopVelocityDamp = 0.75; 
+// ---------------------------------------------------
+// APPLE MOVEMENT LOGIC
+// ---------------------------------------------------
+function updateApple() {
+  // Calculate distance from snake head to apple
+  const head = snake[0];
+  let dxApple = appleX - head.x;
+  let dyApple = appleY - head.y;
+  let distance = Math.sqrt(dxApple * dxApple + dyApple * dyApple);
 
-// Spawns poop from the tail's direction
+  // Base chance for apple to move on each update (1%)
+  let moveChance = 0.1;
+  // If the snake is near (within 3 grid cells), increase the chance (5%)
+  const nearThreshold = gridSize * 4;
+  if (distance < nearThreshold) {
+    moveChance = 0.2;
+  }
+  
+  const nearerThreshold = gridSize * 2;
+  if (distance < nearerThreshold) {
+    moveChance = 0.35;
+  }
+  
+  if (Math.random() < moveChance) {
+    // Choose a random direction among the 4 cardinal ones
+    const moves = [
+      {dx: gridSize, dy: 0},
+      {dx: -gridSize, dy: 0},
+      {dx: 0, dy: gridSize},
+      {dx: 0, dy: -gridSize}
+    ];
+    let move = moves[Math.floor(Math.random() * moves.length)];
+    let newAppleX = appleX + move.dx;
+    let newAppleY = appleY + move.dy;
+    
+    // Wrap around the edges like the snake
+    if (newAppleX < 0) newAppleX = canvas.width - gridSize;
+    else if (newAppleX >= canvas.width) newAppleX = 0;
+    if (newAppleY < 0) newAppleY = canvas.height - gridSize;
+    else if (newAppleY >= canvas.height) newAppleY = 0;
+    
+    // Only move the apple if the new tile is free (not on snake or rock)
+    let free = true;
+    if (snake.some(seg => seg.x === newAppleX && seg.y === newAppleY)) {
+      free = false;
+    }
+    if (isRockTile(newAppleX, newAppleY)) {
+      free = false;
+    }
+    if (free) {
+      appleX = newAppleX;
+      appleY = newAppleY;
+    }
+  }
+}
+
+// ---------------------------------------------------
+// POOP PARTICLES FUNCTIONS
+// ---------------------------------------------------
 function spawnPoopFromTail() {
   if (snake.length === 0) return;
   const tailIndex = snake.length - 1;
@@ -150,7 +206,7 @@ function updatePoopParticles() {
 }
 
 // ---------------------------------------------------
-// GAME OVER
+// GAME OVER VARIABLES
 // ---------------------------------------------------
 let gameOver = false;
 let causeOfDeath = "";
@@ -186,13 +242,16 @@ function update() {
 
   snake.unshift(head);
 
-  // Check apple
+  // Check apple collision
   if (head.x === appleX && head.y === appleY) {
     digestWaves.push({ startFrame: frameCount, finished: false });
     spawnApple();
   } else {
     snake.pop();
   }
+
+  // Update apple movement
+  updateApple();
 
   // Bomb spawn
   const snakeLength = snake.length;
@@ -206,14 +265,14 @@ function update() {
   updateDigestWaves();
   updatePoopParticles();
 
-  // Self-collision
+  // Self-collision check
   for (let i = 1; i < snake.length; i++) {
     if (head.x === snake[i].x && head.y === snake[i].y) {
       endGame("body collision");
       return;
     }
   }
-  // Rock collision
+  // Rock collision check
   for (let rock of rocks) {
     for (let sq of rock.squares) {
       if (head.x === sq.x && head.y === sq.y) {
@@ -222,7 +281,7 @@ function update() {
       }
     }
   }
-  // Bomb collision: touch => explode
+  // Bomb collision: if touching a bomb in flash stage, trigger explosion
   for (let bomb of bombs) {
     if (bomb.stage === "flash" && head.x === bomb.x && head.y === bomb.y) {
       bomb.stage = "explode";
@@ -239,11 +298,9 @@ function update() {
 function updateDigestWaves() {
   for (let w of digestWaves) {
     if (w.finished) continue;
-
     const waveFrame = frameCount - w.startFrame;
     const waveLengthInSegments = snake.length + waveExtra;
     const totalWaveFrames = waveLengthInSegments * waveDurationPerSegment;
-
     if (waveFrame >= totalWaveFrames) {
       w.finished = true;
       if (enablePoop) {
@@ -277,7 +334,7 @@ function draw() {
     drawBombs();
     drawPoopParticles();
 
-    // Draw current score and high score if showScore is true
+    // Draw current score and high score if enabled
     if (showScore) {
       ctx.fillStyle = "white";
       ctx.font = "16px Arial";
