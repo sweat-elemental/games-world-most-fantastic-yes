@@ -88,10 +88,23 @@ const maxScale = 1.7;
 const digestScaleDecay = 0.9;  
 
 // ---------------------------------------------------
-// POOP PARTICLES
+// POOP PARTICLES (These now stick around forever)
 // ---------------------------------------------------
 let poopParticles = [];
-const poopVelocityDamp = 0.75; // for damping poop movement
+const poopVelocityDamp = 0.75; // damping factor for slowing down
+
+// ---------------------------------------------------
+// APPLE PARTICLES (Burst effect when eaten)
+// ---------------------------------------------------
+let appleParticles = [];
+
+// Apple particle configuration variables:
+let appleParticleCount = 7;             // Number of particles
+let appleParticleBaseSize = 3;            // Base size of particles
+let appleParticleSizeVariability = 4;     // Additional random size variability
+let appleParticleBaseSpeed = 0;           // Base speed of particles
+let appleParticleSpeedVariability = 5;    // Additional random speed variability
+let appleParticleRedFrequency = 0.65;      // 50% chance red, else white
 
 // ---------------------------------------------------
 // APPLE MOVEMENT LOGIC
@@ -104,20 +117,15 @@ function updateApple() {
   let distance = Math.sqrt(dxApple * dxApple + dyApple * dyApple);
 
   // Base chance for apple to move on each update (1%)
-  let moveChance = 0.1;
-  // If the snake is near (within 3 grid cells), increase the chance (5%)
-  const nearThreshold = gridSize * 4;
+  let moveChance = 0.01;
+  // Increase chance if snake is near (within 3 grid cells)
+  const nearThreshold = gridSize * 3;
   if (distance < nearThreshold) {
-    moveChance = 0.2;
-  }
-  
-  const nearerThreshold = gridSize * 2;
-  if (distance < nearerThreshold) {
-    moveChance = 0.35;
+    moveChance = 0.05;
   }
   
   if (Math.random() < moveChance) {
-    // Choose a random direction among the 4 cardinal ones
+    // Choose a random cardinal direction
     const moves = [
       {dx: gridSize, dy: 0},
       {dx: -gridSize, dy: 0},
@@ -128,20 +136,16 @@ function updateApple() {
     let newAppleX = appleX + move.dx;
     let newAppleY = appleY + move.dy;
     
-    // Wrap around the edges like the snake
+    // Wrap around the edges
     if (newAppleX < 0) newAppleX = canvas.width - gridSize;
     else if (newAppleX >= canvas.width) newAppleX = 0;
     if (newAppleY < 0) newAppleY = canvas.height - gridSize;
     else if (newAppleY >= canvas.height) newAppleY = 0;
     
-    // Only move the apple if the new tile is free (not on snake or rock)
+    // Move only if the destination is free (not on snake or rock)
     let free = true;
-    if (snake.some(seg => seg.x === newAppleX && seg.y === newAppleY)) {
-      free = false;
-    }
-    if (isRockTile(newAppleX, newAppleY)) {
-      free = false;
-    }
+    if (snake.some(seg => seg.x === newAppleX && seg.y === newAppleY)) free = false;
+    if (isRockTile(newAppleX, newAppleY)) free = false;
     if (free) {
       appleX = newAppleX;
       appleY = newAppleY;
@@ -150,13 +154,14 @@ function updateApple() {
 }
 
 // ---------------------------------------------------
-// POOP PARTICLES FUNCTIONS
+// POOP PARTICLES FUNCTIONS (Modified to never disappear)
 // ---------------------------------------------------
 function spawnPoopFromTail() {
   if (snake.length === 0) return;
   const tailIndex = snake.length - 1;
   const tail = snake[tailIndex];
-
+  
+  // Determine the tail's direction using the previous segment (or fallback to current velocity)
   let tailDX = dx, tailDY = dy;
   if (tailIndex >= 1) {
     const secondLast = snake[tailIndex - 1];
@@ -167,42 +172,93 @@ function spawnPoopFromTail() {
   if (len === 0) { len = 1; }
   tailDX /= len;
   tailDY /= len;
-
+  
+  // "Behind" direction is opposite to tail's movement.
+  const behindDir = { x: -tailDX, y: -tailDY };
+  // Perpendicular vector for lateral scatter.
+  const perp = { x: -tailDY, y: tailDX };
+  
   const count = 6;
   for (let i = 0; i < count; i++) {
-    let angleOffset = (Math.random() - 0.5) * (Math.PI / 6);
-    let cosA = Math.cos(angleOffset);
-    let sinA = Math.sin(angleOffset);
-
-    let outX = tailDX * cosA - tailDY * sinA; 
-    let outY = tailDX * sinA + tailDY * cosA;
+    // Random magnitude within roughly one grid cell, with variability.
+    let r = Math.random() * gridSize * (0.8 + 0.4 * Math.random());
+    // Random lateral offset of about ±gridSize/4.
+    let lateral = (Math.random() - 0.5) * gridSize * 0.5;
     
-    let speed = 3 + Math.random();
-    outX *= speed;
-    outY *= speed;
-
+    let offsetX = behindDir.x * r + perp.x * lateral;
+    let offsetY = behindDir.y * r + perp.y * lateral;
+    
+    // Small random initial velocity.
+    let vx = (Math.random() - 0.5) * 2;
+    let vy = (Math.random() - 0.5) * 2;
+    
     poopParticles.push({
-      x: tail.x + gridSize/2, 
-      y: tail.y + gridSize/2,
-      dx: outX,
-      dy: outY, 
-      life: 20
+      x: tail.x + gridSize/2 + offsetX,
+      y: tail.y + gridSize/2 + offsetY,
+      dx: vx,
+      dy: vy
     });
   }
 }
 
 function updatePoopParticles() {
-  for (let i = poopParticles.length - 1; i >= 0; i--) {
+  // Update each particle's position and slow them down until they stop.
+  for (let i = 0; i < poopParticles.length; i++) {
     let p = poopParticles[i];
-    p.life--;
     p.x += p.dx;
     p.y += p.dy;
     p.dx *= poopVelocityDamp;
     p.dy *= poopVelocityDamp;
-    if (p.life <= 0) {
-      poopParticles.splice(i, 1);
+    if (Math.abs(p.dx) < 0.1 && Math.abs(p.dy) < 0.1) {
+      p.dx = 0;
+      p.dy = 0;
     }
   }
+}
+
+// ---------------------------------------------------
+// APPLE PARTICLE FUNCTIONS (Burst then slow and stick)
+// ---------------------------------------------------
+function createAppleParticles(x, y) {
+  for (let i = 0; i < appleParticleCount; i++) {
+    const angle = Math.random() * 2 * Math.PI;
+    // Speed is randomized using base speed and variability.
+    const speed = appleParticleBaseSpeed + Math.random() * appleParticleSpeedVariability;
+    // Size is randomized using base size and variability.
+    const size = appleParticleBaseSize + Math.random() * appleParticleSizeVariability;
+    const color = Math.random() < appleParticleRedFrequency ? "red" : "white";
+    appleParticles.push({
+      x: x + gridSize / 2,
+      y: y + gridSize / 2,
+      dx: Math.cos(angle) * speed,
+      dy: Math.sin(angle) * speed,
+      size: size,
+      color: color
+    });
+  }
+}
+
+function updateAppleParticles() {
+  // Dampen velocity to simulate a burst that slows to a stop.
+  for (let i = 0; i < appleParticles.length; i++) {
+    let p = appleParticles[i];
+    p.dx *= 0.8;
+    p.dy *= 0.8;
+    p.x += p.dx;
+    p.y += p.dy;
+    if (Math.abs(p.dx) < 0.1 && Math.abs(p.dy) < 0.1) {
+      p.dx = 0;
+      p.dy = 0;
+    }
+  }
+}
+
+function drawAppleParticles() {
+  appleParticles.forEach(p => {
+    ctx.fillStyle = p.color;
+    let half = p.size / 2;
+    ctx.fillRect(p.x - half, p.y - half, p.size, p.size);
+  });
 }
 
 // ---------------------------------------------------
@@ -245,6 +301,7 @@ function update() {
   // Check apple collision
   if (head.x === appleX && head.y === appleY) {
     digestWaves.push({ startFrame: frameCount, finished: false });
+    createAppleParticles(appleX, appleY);
     spawnApple();
   } else {
     snake.pop();
@@ -260,10 +317,11 @@ function update() {
     spawnBomb();
   }
 
-  // Update bombs, digest waves, and poop particles
+  // Update bombs, digest waves, poop particles, and apple particles
   updateBombs();
   updateDigestWaves();
   updatePoopParticles();
+  updateAppleParticles();
 
   // Self-collision check
   for (let i = 1; i < snake.length; i++) {
@@ -317,6 +375,11 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (!gameOver) {
+    // Draw apple particles and poo particles first so they appear beneath the snake.
+    drawAppleParticles();
+    drawPoopParticles();
+
+    // Draw snake on top of the particles.
     drawSnakeWithDigest();
 
     // Draw apple
@@ -332,7 +395,6 @@ function draw() {
     });
 
     drawBombs();
-    drawPoopParticles();
 
     // Draw current score and high score if enabled
     if (showScore) {
@@ -544,9 +606,7 @@ function spawnRocks(count) {
           });
         }
       }
-      if (squares.some(sq => snake.some(sg => sg.x === sq.x && sg.y === sq.y))) {
-        continue;
-      }
+      if (squares.some(sq => snake.some(sg => sg.x === sq.x && sg.y === sq.y))) continue;
       let conflict = false;
       for (let rock of rocks) {
         for (let sq of rock.squares) {
@@ -568,9 +628,7 @@ function spawnRocks(count) {
 function isRockTile(x, y) {
   for (let rock of rocks) {
     for (let sq of rock.squares) {
-      if (sq.x === x && sq.y === y) {
-        return true;
-      }
+      if (sq.x === x && sq.y === y) return true;
     }
   }
   return false;
@@ -606,19 +664,15 @@ function endGame(reason) {
   gameOver = true;
   causeOfDeath = reason;
   finalLength = snake.length;
-  if (finalLength > highScore) {
-    highScore = finalLength;
-  }
+  if (finalLength > highScore) highScore = finalLength;
 }
 
 function drawGameOverScreen() {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
   ctx.fillStyle = "white";
   ctx.textAlign = "center";
   ctx.font = "20px Arial";
-
   ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 60);
   ctx.fillText("Final Length: " + finalLength, canvas.width / 2, canvas.height / 2 - 20);
   ctx.fillText("High Score: " + highScore, canvas.width / 2, canvas.height / 2 + 20);
@@ -654,9 +708,7 @@ function handleKey(e) {
         break;
     }
   } else {
-    if (e.key === "Enter" || e.key === "e") {
-      resetGame();
-    }
+    if (e.key === "Enter" || e.key === "e") resetGame();
   }
 }
 
@@ -671,6 +723,7 @@ function resetGame() {
   rocks = [];
   digestWaves = [];
   poopParticles = [];
+  appleParticles = [];
   frameCount = 0;
   spawnRocks(rockCount);
   spawnApple();
