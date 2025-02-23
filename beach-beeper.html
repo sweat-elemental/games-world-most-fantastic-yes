@@ -273,17 +273,14 @@
       // Deduct one shovel durability for digging.
       shovelDurability--;
       updateShovelDisplay();
-      // If shovels run out, show game over screen.
+      // If shovels run out, process the dig then trigger game over.
       if (shovelDurability <= 0) {
-        // You can optionally process the current dig before game over.
-        // For now, we still mark the tile as dug.
-        // Check for a hidden object.
         let foundItem = null;
         for (let i = 0; i < hiddenObjects.length; i++) {
           const item = hiddenObjects[i];
           if (item.x === tileCol && item.y === tileRow) {
             foundItem = item;
-            hiddenObjects.splice(i, 1); // remove so it stops beeping
+            hiddenObjects.splice(i, 1);
             break;
           }
         }
@@ -296,11 +293,9 @@
         } else {
           dugTiles[key] = { color: defaultDugColor };
         }
-        // Spawn sand particles.
         const tileCenterX = tileCol * gridSize + gridSize / 2;
         const tileCenterY = tileRow * gridSize + gridSize / 2;
         spawnSandParticles(tileCenterX, tileCenterY);
-        // End the game.
         gameOver = true;
         paused = true;
         gameOverScreen.style.display = "flex";
@@ -313,7 +308,7 @@
         const item = hiddenObjects[i];
         if (item.x === tileCol && item.y === tileRow) {
           foundItem = item;
-          hiddenObjects.splice(i, 1); // remove so it stops beeping
+          hiddenObjects.splice(i, 1);
           break;
         }
       }
@@ -326,7 +321,6 @@
       } else {
         dugTiles[key] = { color: defaultDugColor };
       }
-      // Spawn sand particles.
       const tileCenterX = tileCol * gridSize + gridSize / 2;
       const tileCenterY = tileRow * gridSize + gridSize / 2;
       spawnSandParticles(tileCenterX, tileCenterY);
@@ -337,8 +331,9 @@
     // ====================================================
     function updateShovelDisplay() {
       const shovelDiv = document.getElementById("shovelCounter");
+      // The inline style now includes "image-rendering: pixelated" for clarity.
       shovelDiv.innerHTML = '<img src="' + SHOVEL_SPRITE_SRC + 
-        '" style="vertical-align: middle; height: 18px; margin-right: 5px;" />' + shovelDurability;
+        '" style="vertical-align: middle; height: 18px; margin-right: 5px; image-rendering: pixelated;" />' + shovelDurability;
     }
 
     // ====================================================
@@ -392,7 +387,7 @@
           rockX = Math.floor(Math.random() * cols);
           rockY = Math.floor(Math.random() * (rows - waterRows));
           if (Math.abs(rockX - safeCol) <= 1 && Math.abs(rockY - safeRow) <= 1) {
-            valid = false; // Rock too close to the player's spawn safe zone, re-roll.
+            valid = false;
           } else {
             valid = true;
           }
