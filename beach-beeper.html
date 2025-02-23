@@ -52,6 +52,12 @@
       font: bold 18px Arial;
       z-index: 50;
     }
+    /* High score text shown on game over screen */
+    #highScoreDisplay {
+      color: white;
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
@@ -71,6 +77,7 @@
   <!-- Game over overlay -->
   <div id="gameOverScreen">
     <div style="color:white; font-size: 24px; margin-bottom: 20px;">Game Over! Out of shovels!</div>
+    <div id="highScoreDisplay"></div>
     <button id="restartBtn">Restart</button>
     <button id="exitBtn2">Exit</button>
   </div>
@@ -149,8 +156,13 @@
     };
 
     // Shovel durability mechanic.
-    let shovelDurability = 40;  // reset each level
+    // startingDurability persists between levels; if undefined, first level starts with 40.
+    let startingDurability = 40;
+    let shovelDurability = startingDurability;
     let gameOver = false;
+
+    // Global treasure high score (persisted between restarts).
+    let treasureHighScore = 0;
 
     // Key state for continuous movement.
     const keys = {};
@@ -273,36 +285,8 @@
       // Deduct one shovel durability for digging.
       shovelDurability--;
       updateShovelDisplay();
-      // If shovels run out, process the dig then trigger game over.
-      if (shovelDurability <= 0) {
-        let foundItem = null;
-        for (let i = 0; i < hiddenObjects.length; i++) {
-          const item = hiddenObjects[i];
-          if (item.x === tileCol && item.y === tileRow) {
-            foundItem = item;
-            hiddenObjects.splice(i, 1);
-            break;
-          }
-        }
-        if (foundItem) {
-          dugTiles[key] = { color: (foundItem.type === "treasure" ? treasureColor : trashColor) };
-          if (foundItem.type === "treasure") {
-            foundMapTreasures++;
-            cumulativeTreasures++;
-          }
-        } else {
-          dugTiles[key] = { color: defaultDugColor };
-        }
-        const tileCenterX = tileCol * gridSize + gridSize / 2;
-        const tileCenterY = tileRow * gridSize + gridSize / 2;
-        spawnSandParticles(tileCenterX, tileCenterY);
-        gameOver = true;
-        paused = true;
-        gameOverScreen.style.display = "flex";
-        return;
-      }
       
-      // Process normal digging.
+      // Process the digging on this tile.
       let foundItem = null;
       for (let i = 0; i < hiddenObjects.length; i++) {
         const item = hiddenObjects[i];
@@ -324,6 +308,17 @@
       const tileCenterX = tileCol * gridSize + gridSize / 2;
       const tileCenterY = tileRow * gridSize + gridSize / 2;
       spawnSandParticles(tileCenterX, tileCenterY);
+
+      // If shovels run out after this dig, update high score and trigger game over.
+      if (shovelDurability <= 0) {
+        if (cumulativeTreasures > treasureHighScore) {
+          treasureHighScore = cumulativeTreasures;
+        }
+        document.getElementById("highScoreDisplay").innerText = "High Score: " + treasureHighScore;
+        gameOver = true;
+        paused = true;
+        gameOverScreen.style.display = "flex";
+      }
     });
 
     // ====================================================
@@ -331,7 +326,7 @@
     // ====================================================
     function updateShovelDisplay() {
       const shovelDiv = document.getElementById("shovelCounter");
-      // The inline style now includes "image-rendering: pixelated" for clarity.
+      // The inline style includes "image-rendering: pixelated" for consistency.
       shovelDiv.innerHTML = '<img src="' + SHOVEL_SPRITE_SRC + 
         '" style="vertical-align: middle; height: 18px; margin-right: 5px; image-rendering: pixelated;" />' + shovelDurability;
     }
@@ -365,8 +360,8 @@
     // INITIALIZE GAME (map)
     // ====================================================
     function initGame() {
-      // Reset shovel durability and hide game over screen.
-      shovelDurability = 40;
+      // Reset durability using the startingDurability value (persisted from previous level).
+      shovelDurability = startingDurability;
       gameOver = false;
       updateShovelDisplay();
       gameOverScreen.style.display = "none";
@@ -614,16 +609,35 @@
         });
       }
       
+      // Draw the beep text with a random offset and rotation.
       if (detectorFlashActive) {
+        ctx.save();
+        // Calculate the base position for the beep text.
+        let centerX = player.x + player.width / 2;
+        let centerY = player.y - 5;
+        // Generate a small random offset.
+        let offsetX = Math.random() * 4 - 2; // -2 to 2
+        let offsetY = Math.random() * 4 - 2; // -2 to 2
+        // Generate a small random rotation (in radians).
+        let rotation = (Math.random() * 10 - 5) * Math.PI / 180; // -5deg to 5deg
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation);
+        ctx.translate(offsetX, offsetY);
         ctx.fillStyle = "black";
         ctx.font = "bold 16px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("BEEP", player.x + player.width / 2, player.y - 5);
+        ctx.fillText("BEEP", 0, 0);
+        ctx.restore();
       }
     }
     
+    // ====================================================
+    // NEXT LEVEL: update starting durability and reinitialize game.
+    // ====================================================
     function nextArea() {
       nextAreaPopup.style.display = "none";
+      // Round the remaining durability up to the nearest 5 (capped at 40).
+      startingDurability = Math.min(40, Math.ceil(shovelDurability / 5) * 5);
       initGame();
     }
     
