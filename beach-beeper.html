@@ -13,6 +13,7 @@
       margin: 20px auto;
       background: #F4A460; /* Light sand color */
       border: 2px solid #000;
+      image-rendering: pixelated; /* Ensures pixel perfect rendering */
     }
     /* Pause menu and next area popup styling */
     #menu, #nextAreaPopup {
@@ -98,6 +99,7 @@
     // ====================================================
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false; // Disable smoothing for pixel perfect rendering
     const gridSize = 32; // each grid cell is 32x32 pixels
     const cols = Math.floor(canvas.width / gridSize);
     const rows = Math.floor(canvas.height / gridSize);
