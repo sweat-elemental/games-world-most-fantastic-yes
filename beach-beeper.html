@@ -117,8 +117,8 @@
         y: 300,
         width: 32,
         height: 32,
-        spriteWidth: 72,    // custom drawn width
-        spriteHeight: 72,   // custom drawn height
+        spriteWidth: 72,    
+        spriteHeight: 72,   
         sprite: npc2Sprite
       }
     ];
@@ -135,12 +135,12 @@
     const rows = Math.floor(canvas.height / gridSize);
 
     // Colors
-    const sandColor       = "#F4A460"; // light sand (background)
-    const defaultDugColor = "#CD853F"; // darker sand (dug-up)
-    const rockColor       = "#808080"; // rocks
-    const waterColor      = "#00BFFF"; // water
-    const treasureColor   = "gold";    // treasure revealed
-    const trashColor      = "brown";   // trash revealed
+    const sandColor       = "#F4A460";
+    const defaultDugColor = "#CD853F";
+    const rockColor       = "#808080";
+    const waterColor      = "#00BFFF";
+    const treasureColor   = "gold";
+    const trashColor      = "brown";
 
     // Water area: bottom rows are water.
     const waterRows = 2;
@@ -151,18 +151,23 @@
       y: ((rows - waterRows) * gridSize) / 2 - gridSize,
       width: gridSize,
       height: gridSize * 2,
-      spriteWidth: 72,    // custom drawn width
-      spriteHeight: 72    // custom drawn height
+      spriteWidth: 72,
+      spriteHeight: 72
     };
 
     // Shovel durability mechanic.
-    // startingDurability persists between levels; if undefined, first level starts with 40.
+    // startingDurability persists between levels; initial value is 40.
     let startingDurability = 40;
     let shovelDurability = startingDurability;
     let gameOver = false;
 
-    // Global treasure high score (persisted between restarts).
+    // Global treasure high score (persisted between game overs).
     let treasureHighScore = 0;
+
+    // Treasure count for the current run.
+    let cumulativeTreasures = 0;
+    let currentMapTreasureCount = 0;
+    let foundMapTreasures = 0;
 
     // Key state for continuous movement.
     const keys = {};
@@ -182,24 +187,24 @@
     document.addEventListener("keyup", (e) => { keys[e.key] = false; });
     const playerSpeed = 200; // pixels per second
 
-    // Arrays for obstacles and hidden objects (grid-based).
+    // Arrays for obstacles and hidden objects.
     let rocks = [];
-    let hiddenObjects = []; // Each hidden object: { x, y, type } (type: "treasure" or "trash")
-    let dugTiles = {};      // keys "col,row" => { color }
+    let hiddenObjects = [];
+    let dugTiles = {};
 
     // Particle system for sand particles.
     let particles = [];
 
     // Metal detector (visual beep indicator).
     let detectionRadius = gridSize * 4;
-    let beepInterval = 1000; // ms, adjusted by proximity.
+    let beepInterval = 1000;
     let nextFlashTime = 0;
     let flashEndTime = 0;
-    const flashDuration = 100; // ms
+    const flashDuration = 100;
     let detectorFlashActive = false;
     let prevBeepInterval = 1000;
 
-    // Water animation (randomized arcs).
+    // Water animation.
     const cpSpacing = 50;
     const waveAnimationSpeed = 0.001;
     const maxWaveHeight = 30;
@@ -226,19 +231,17 @@
     exitBtn.addEventListener("click", () => { window.location.href = "index.html"; });
     nextAreaBtn.addEventListener("click", nextArea);
     restartBtn.addEventListener("click", () => {
+      // Reset treasures for a new run while keeping the high score.
+      cumulativeTreasures = 0;
+      startingDurability = 40;
       gameOverScreen.style.display = "none";
       initGame();
       paused = false;
     });
     exitBtn2.addEventListener("click", () => { window.location.href = "index.html"; });
 
-    // Treasure counters.
-    let cumulativeTreasures = 0;    // overall count
-    let currentMapTreasureCount = 0; // total treasures in current map
-    let foundMapTreasures = 0;       // treasures found in current map
-
     // ====================================================
-    // COLLISION UTILITY (only bottom half of player collides)
+    // COLLISION UTILITY
     // ====================================================
     function getPlayerCollisionRect() {
       return {
@@ -256,37 +259,31 @@
     }
 
     // ====================================================
-    // SIMPLE DIGGING MECHANIC (by clicking a tile)
+    // DIGGING MECHANIC (by clicking a tile)
     // ====================================================
-    const digRadius = 3; // expanded from 2 to 3 grid cells
+    const digRadius = 3;
     canvas.addEventListener("mousedown", (e) => {
-      // Do not allow digging if the game is paused or over.
       if (paused || gameOver) return;
-
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       const tileCol = Math.floor(mouseX / gridSize);
       const tileRow = Math.floor(mouseY / gridSize);
-      if (tileRow >= rows - waterRows) return; // clicked in water
-
-      // Check if the tile has already been dug.
+      if (tileRow >= rows - waterRows) return;
       const key = tileCol + "," + tileRow;
-      if (dugTiles[key]) return; // already dug
-      
-      // Check distance from player's feet.
+      if (dugTiles[key]) return;
       const playerFeetX = Math.floor((player.x + player.width / 2) / gridSize);
       const playerFeetY = Math.floor((player.y + player.height) / gridSize);
       const dx = tileCol - playerFeetX;
       const dy = tileRow - playerFeetY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > digRadius) return; // too far to dig
-
-      // Deduct one shovel durability for digging.
+      if (dist > digRadius) return;
+      
+      // Deduct shovel durability and update display.
       shovelDurability--;
       updateShovelDisplay();
       
-      // Process the digging on this tile.
+      // Process digging.
       let foundItem = null;
       for (let i = 0; i < hiddenObjects.length; i++) {
         const item = hiddenObjects[i];
@@ -308,8 +305,8 @@
       const tileCenterX = tileCol * gridSize + gridSize / 2;
       const tileCenterY = tileRow * gridSize + gridSize / 2;
       spawnSandParticles(tileCenterX, tileCenterY);
-
-      // If shovels run out after this dig, update high score and trigger game over.
+      
+      // If shovels run out, update high score and trigger game over.
       if (shovelDurability <= 0) {
         if (cumulativeTreasures > treasureHighScore) {
           treasureHighScore = cumulativeTreasures;
@@ -326,7 +323,6 @@
     // ====================================================
     function updateShovelDisplay() {
       const shovelDiv = document.getElementById("shovelCounter");
-      // The inline style includes "image-rendering: pixelated" for consistency.
       shovelDiv.innerHTML = '<img src="' + SHOVEL_SPRITE_SRC + 
         '" style="vertical-align: middle; height: 18px; margin-right: 5px; image-rendering: pixelated;" />' + shovelDurability;
     }
@@ -360,24 +356,22 @@
     // INITIALIZE GAME (map)
     // ====================================================
     function initGame() {
-      // Reset durability using the startingDurability value (persisted from previous level).
+      // Reset durability using startingDurability (persisted from previous level).
       shovelDurability = startingDurability;
-      gameOver = false;
       updateShovelDisplay();
+      gameOver = false;
       gameOverScreen.style.display = "none";
       
-      // Determine the fixed spawn location for the player.
+      // Determine fixed spawn location.
       const spawnX = canvas.width / 2 - gridSize / 2;
       const spawnY = ((rows - waterRows) * gridSize) / 2 - gridSize;
-      // Define the player's collision safe zone.
       const safeCol = Math.floor(spawnX / gridSize);
       const safeRow = Math.floor((spawnY + player.height / 2) / gridSize);
       
-      // Place rocks randomly, ensuring none spawn in or adjacent to the safe zone.
+      // Place rocks randomly outside the safe zone.
       rocks = [];
       for (let i = 0; i < 10; i++) {
-        let rockX, rockY;
-        let valid = false;
+        let rockX, rockY, valid = false;
         while (!valid) {
           rockX = Math.floor(Math.random() * cols);
           rockY = Math.floor(Math.random() * (rows - waterRows));
@@ -396,8 +390,7 @@
       let totalHidden = 1 + extraCount;
       let placed = 0;
       while (placed < totalHidden) {
-        let valid = false;
-        let objX, objY;
+        let valid = false, objX, objY;
         while (!valid) {
           objX = Math.floor(Math.random() * cols);
           objY = Math.floor(Math.random() * (rows - waterRows));
@@ -428,11 +421,11 @@
           current: 0
         });
       }
-      // Reset player location to the fixed spawn.
+      // Reset player location.
       player.x = spawnX;
       player.y = spawnY;
       
-      // Spawn NPCs with a 50% chance each.
+      // Spawn NPCs.
       npcs = [];
       npcData.forEach(npc => {
         if (Math.random() < 0.5) {
@@ -453,7 +446,6 @@
       requestAnimationFrame(gameLoop);
     }
     function update(delta, timestamp) {
-      // Save old player positions.
       let oldX = player.x, oldY = player.y;
       let dx = 0, dy = 0;
       if (keys["ArrowUp"] || keys["w"]) dy = -playerSpeed * delta;
@@ -461,7 +453,6 @@
       if (keys["ArrowLeft"] || keys["a"]) dx = -playerSpeed * delta;
       if (keys["ArrowRight"] || keys["d"]) dx = playerSpeed * delta;
       
-      // Update X and check collisions.
       player.x += dx;
       if (player.x < 0) player.x = 0;
       if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
@@ -471,18 +462,15 @@
         width: player.width,
         height: player.height / 2
       };
-      // Collision with rocks.
       for (let rock of rocks) {
         let rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
         if (rectsCollide(collisionRect, rockRect)) { player.x = oldX; break; }
       }
-      // Collision with NPCs.
       for (let npc of npcs) {
         let npcRect = { x: npc.x, y: npc.y, width: npc.width, height: npc.height };
         if (rectsCollide(collisionRect, npcRect)) { player.x = oldX; break; }
       }
       
-      // Update Y and check collisions.
       player.y += dy;
       const maxY = (rows - waterRows) * gridSize - player.height;
       if (player.y < 0) player.y = 0;
@@ -507,7 +495,6 @@
       });
       updateParticles(delta);
       
-      // Metal detector beep indicator.
       const playerCenterX = player.x + player.width / 2;
       const playerCenterY = player.y + player.height / 2;
       let minDistance = Infinity;
@@ -584,14 +571,12 @@
         ctx.fillRect(rock.x * gridSize, rock.y * gridSize, gridSize, gridSize);
       });
       
-      // Draw spawned NPCs with custom sprite dimensions.
       npcs.forEach(npc => {
         let offsetX = (npc.spriteWidth - npc.width) / 2;
         let offsetY = npc.spriteHeight - npc.height;
         ctx.drawImage(npc.sprite, npc.x - offsetX, npc.y - offsetY, npc.spriteWidth, npc.spriteHeight);
       });
       
-      // Draw the player with custom sprite dimensions.
       let playerOffsetX = (player.spriteWidth - player.width) / 2;
       let playerOffsetY = player.spriteHeight - player.height;
       ctx.drawImage(playerSprite, player.x - playerOffsetX, player.y - playerOffsetY, player.spriteWidth, player.spriteHeight);
@@ -609,18 +594,20 @@
         });
       }
       
-      // Draw the beep text with a random offset and rotation.
+      // Draw the beep text with random offset and rotation around the upper half of the player's sprite (the head area).
       if (detectorFlashActive) {
         ctx.save();
-        // Calculate the base position for the beep text.
-        let centerX = player.x + player.width / 2;
-        let centerY = player.y - 5;
-        // Generate a small random offset.
-        let offsetX = Math.random() * 4 - 2; // -2 to 2
-        let offsetY = Math.random() * 4 - 2; // -2 to 2
-        // Generate a small random rotation (in radians).
-        let rotation = (Math.random() * 10 - 5) * Math.PI / 180; // -5deg to 5deg
-        ctx.translate(centerX, centerY);
+        // Calculate the head position.
+        let playerOffsetY = player.spriteHeight - player.height;
+        // The top of the sprite is at player.y - playerOffsetY.
+        // We'll spawn the beep text roughly at one-third down from the top.
+        let headX = player.x + player.width / 2;
+        let headY = player.y - playerOffsetY + (player.spriteHeight / 3);
+        // Randomize the position around the head area.
+        let offsetX = Math.random() * 10 - 5; // random shift between -5 and 5
+        let offsetY = Math.random() * 10 - 5;
+        let rotation = (Math.random() * 10 - 5) * Math.PI / 180; // -5 to 5 degrees
+        ctx.translate(headX, headY);
         ctx.rotate(rotation);
         ctx.translate(offsetX, offsetY);
         ctx.fillStyle = "black";
@@ -632,11 +619,11 @@
     }
     
     // ====================================================
-    // NEXT LEVEL: update starting durability and reinitialize game.
+    // NEXT LEVEL: adjust starting durability and reinitialize game.
     // ====================================================
     function nextArea() {
       nextAreaPopup.style.display = "none";
-      // Round the remaining durability up to the nearest 5 (capped at 40).
+      // Round remaining durability up to nearest 5 (max 40) for the next level.
       startingDurability = Math.min(40, Math.ceil(shovelDurability / 5) * 5);
       initGame();
     }
