@@ -142,7 +142,7 @@
     const treasureColor   = "gold";
     const trashColor      = "brown";
 
-    // Water area: bottom rows are water.
+    // Water area.
     const waterRows = 2;
 
     // Player settings.
@@ -169,9 +169,15 @@
     // Configuration for the beep text.
     const beepTextConfig = {
       fontSize: 8,        // in pixels
-      offsetRange: 2,     // maximum offset (pixels) for both x and y directions
+      offsetRange: 2,     // maximum offset (pixels)
       rotationRange: 2    // maximum rotation in degrees
     };
+
+    // Variables to store the beep text's spawn offsets.
+    let beepTextOffsetX = 0;
+    let beepTextOffsetY = 0;
+    let beepTextRotation = 0;
+    let beepTextSpawned = false;
 
     // Key state and input.
     const keys = {};
@@ -510,8 +516,18 @@
           detectorFlashActive = true;
           flashEndTime = timestamp + flashDuration;
           nextFlashTime = timestamp + beepInterval;
+          // Spawn beep text once.
+          if (!beepTextSpawned) {
+            beepTextOffsetX = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
+            beepTextOffsetY = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
+            beepTextRotation = (Math.random() * (beepTextConfig.rotationRange * 2) - beepTextConfig.rotationRange) * Math.PI / 180;
+            beepTextSpawned = true;
+          }
         }
-        if (detectorFlashActive && timestamp > flashEndTime) detectorFlashActive = false;
+        if (detectorFlashActive && timestamp > flashEndTime) {
+          detectorFlashActive = false;
+          beepTextSpawned = false;
+        }
       } else {
         detectorFlashActive = false;
         nextFlashTime = timestamp + 1000;
@@ -587,18 +603,15 @@
         });
       }
       
-      // Draw the beep text with configurable random offset and rotation around the player's head area.
+      // Draw the beep text using the fixed spawn values.
       if (detectorFlashActive) {
         ctx.save();
         let playerOffsetY = player.spriteHeight - player.height;
         let headX = player.x + player.width / 2;
         let headY = player.y - playerOffsetY + (player.spriteHeight / 3);
-        let offsetX = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
-        let offsetY = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
-        let rotation = (Math.random() * (beepTextConfig.rotationRange * 2) - beepTextConfig.rotationRange) * Math.PI / 180;
         ctx.translate(headX, headY);
-        ctx.rotate(rotation);
-        ctx.translate(offsetX, offsetY);
+        ctx.rotate(beepTextRotation);
+        ctx.translate(beepTextOffsetX, beepTextOffsetY);
         ctx.fillStyle = "black";
         ctx.font = "bold " + beepTextConfig.fontSize + "px Arial";
         ctx.textAlign = "center";
