@@ -60,7 +60,7 @@
   </div>
   <script>
     // ====================================================
-    // SPRITE REFERENCES & NPC LOCATIONS (Easily configurable)
+    // SPRITE REFERENCES
     // ====================================================
     const PLAYER_SPRITE_SRC = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/detectorist.png";
     const NPC1_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/beachgoer.png";
@@ -75,31 +75,39 @@
     let npc2Sprite = new Image();
     npc2Sprite.src = NPC2_SPRITE_SRC;
     
-    // Set initial NPC positions and collision dimensions.
-    // Added spriteWidth and spriteHeight for graphical rendering.
-    let npc1 = {
-      x: 100, 
-      y: 100,
-      width: 32,
-      height: 32,
-      spriteWidth: 72,    // custom drawn width
-      spriteHeight: 72    // custom drawn height
-    };
-    let npc2 = {
-      x: 600,
-      y: 300,
-      width: 32,
-      height: 32,
-      spriteWidth: 72,    // custom drawn width
-      spriteHeight: 72    // custom drawn height
-    };
-
+    // ====================================================
+    // NPC DATA & SPAWN
+    // ====================================================
+    // This data defines the NPCs’ collision box and graphical dimensions.
+    const npcData = [
+      {
+        x: 100, 
+        y: 100,
+        width: 32,
+        height: 32,
+        spriteWidth: 48,    // custom drawn width
+        spriteHeight: 48,   // custom drawn height
+        sprite: npc1Sprite
+      },
+      {
+        x: 600,
+        y: 300,
+        width: 32,
+        height: 32,
+        spriteWidth: 48,    // custom drawn width
+        spriteHeight: 48,   // custom drawn height
+        sprite: npc2Sprite
+      }
+    ];
+    // The active NPCs will be stored here.
+    let npcs = [];
+    
     // ====================================================
     // GLOBAL VARIABLES & SETTINGS
     // ====================================================
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = false; // Disable smoothing for pixel perfect rendering
+    ctx.imageSmoothingEnabled = false; // disable smoothing for crisp pixel art
     const gridSize = 32; // each grid cell is 32x32 pixels
     const cols = Math.floor(canvas.width / gridSize);
     const rows = Math.floor(canvas.height / gridSize);
@@ -115,16 +123,15 @@
     // Water area: bottom rows are water.
     const waterRows = 2;
 
-    // Player (continuous pixel coordinates).
-    // The collision box remains gridSize by gridSize*2.
-    // We add spriteWidth and spriteHeight for the drawn sprite.
+    // Player (collision dimensions remain fixed).
+    // The drawn sprite can be scaled independently.
     let player = {
       x: canvas.width / 2 - gridSize / 2,
       y: ((rows - waterRows) * gridSize) / 2 - gridSize,
       width: gridSize,
       height: gridSize * 2,
-      spriteWidth: 72,    // custom drawn width
-      spriteHeight: 72    // custom drawn height
+      spriteWidth: 64,    // custom drawn width
+      spriteHeight: 96    // custom drawn height
     };
 
     // Key state for continuous movement.
@@ -333,6 +340,17 @@
       // Reset player location.
       player.x = canvas.width / 2 - gridSize / 2;
       player.y = ((rows - waterRows) * gridSize) / 2 - gridSize;
+      
+      // -------------------------------------------------
+      // SPAWN NPCs WITH A CHANCE (50% chance each)
+      // -------------------------------------------------
+      npcs = [];
+      npcData.forEach(npc => {
+        if (Math.random() < 0.5) {
+          // Optionally, you can randomize positions here.
+          npcs.push(Object.assign({}, npc));
+        }
+      });
     }
 
     // ====================================================
@@ -347,6 +365,7 @@
       requestAnimationFrame(gameLoop);
     }
     function update(delta, timestamp) {
+      // Save old player positions.
       let oldX = player.x, oldY = player.y;
       let dx = 0, dy = 0;
       if (keys["ArrowUp"] || keys["w"]) dy = -playerSpeed * delta;
@@ -354,6 +373,7 @@
       if (keys["ArrowLeft"] || keys["a"]) dx = -playerSpeed * delta;
       if (keys["ArrowRight"] || keys["d"]) dx = playerSpeed * delta;
       
+      // Update X and check collisions.
       player.x += dx;
       if (player.x < 0) player.x = 0;
       if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
@@ -363,11 +383,18 @@
         width: player.width,
         height: player.height / 2
       };
+      // Collision with rocks.
       for (let rock of rocks) {
         let rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
         if (rectsCollide(collisionRect, rockRect)) { player.x = oldX; break; }
       }
+      // Collision with NPCs.
+      for (let npc of npcs) {
+        let npcRect = { x: npc.x, y: npc.y, width: npc.width, height: npc.height };
+        if (rectsCollide(collisionRect, npcRect)) { player.x = oldX; break; }
+      }
       
+      // Update Y and check collisions.
       player.y += dy;
       const maxY = (rows - waterRows) * gridSize - player.height;
       if (player.y < 0) player.y = 0;
@@ -382,12 +409,17 @@
         let rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
         if (rectsCollide(collisionRect, rockRect)) { player.y = oldY; break; }
       }
+      for (let npc of npcs) {
+        let npcRect = { x: npc.x, y: npc.y, width: npc.width, height: npc.height };
+        if (rectsCollide(collisionRect, npcRect)) { player.y = oldY; break; }
+      }
       
       controlPoints.forEach(cp => {
         cp.current = ((Math.sin(cp.phase + timestamp * cp.speed) + 1) / 2) * maxWaveHeight;
       });
       updateParticles(delta);
       
+      // Metal detector beep indicator.
       const playerCenterX = player.x + player.width / 2;
       const playerCenterY = player.y + player.height / 2;
       let minDistance = Infinity;
@@ -446,7 +478,7 @@
           let cp1 = controlPoints[i], cp2 = controlPoints[i+1];
           let x1 = cp1.x, y1 = baseWaterY - cp1.current;
           let x2 = cp2.x, y2 = baseWaterY - cp2.current;
-          let midX = (x1+x2)/2, midY = (y1+y2)/2;
+          let midX = (x1 + x2) / 2, midY = (y1 + y2) / 2;
           ctx.quadraticCurveTo(x1, y1, midX, midY);
         }
         let lastCP = controlPoints[controlPoints.length - 1];
@@ -464,14 +496,12 @@
         ctx.fillRect(rock.x * gridSize, rock.y * gridSize, gridSize, gridSize);
       });
       
-      // Draw NPCs with custom sprite dimensions.
-      let npc1OffsetX = (npc1.spriteWidth - npc1.width) / 2;
-      let npc1OffsetY = npc1.spriteHeight - npc1.height;
-      ctx.drawImage(npc1Sprite, npc1.x - npc1OffsetX, npc1.y - npc1OffsetY, npc1.spriteWidth, npc1.spriteHeight);
-      
-      let npc2OffsetX = (npc2.spriteWidth - npc2.width) / 2;
-      let npc2OffsetY = npc2.spriteHeight - npc2.height;
-      ctx.drawImage(npc2Sprite, npc2.x - npc2OffsetX, npc2.y - npc2OffsetY, npc2.spriteWidth, npc2.spriteHeight);
+      // Draw spawned NPCs with custom sprite dimensions.
+      npcs.forEach(npc => {
+        let offsetX = (npc.spriteWidth - npc.width) / 2;
+        let offsetY = npc.spriteHeight - npc.height;
+        ctx.drawImage(npc.sprite, npc.x - offsetX, npc.y - offsetY, npc.spriteWidth, npc.spriteHeight);
+      });
       
       // Draw the player with custom sprite dimensions.
       let playerOffsetX = (player.spriteWidth - player.width) / 2;
