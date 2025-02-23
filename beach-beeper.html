@@ -45,475 +45,465 @@
   </style>
 </head>
 <body>
-<div id="counter">Treasures found: 0</div>
-<canvas id="gameCanvas" width="800" height="600"></canvas>
-<!-- Pause menu overlay -->
-<div id="menu">
-  <button id="resumeBtn">Resume</button>
-  <button id="exitBtn">Exit</button>
-</div>
-<!-- Next area popup -->
-<div id="nextAreaPopup">
-  <div style="color:white; font-size: 24px; margin-bottom: 20px;">You found all the treasure!</div>
-  <button id="nextAreaBtn">Next Area -></button>
-</div>
-<script>
-  // ====================================================
-  // SPRITE REFERENCES & NPC LOCATIONS (Easily configurable)
-  // ====================================================
-  const PLAYER_SPRITE_SRC = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/detectorist.png";
-  const NPC1_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/beachgoer.png";
-  const NPC2_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/salesman.png";
-  
-  
-  let playerSprite = new Image();
-  playerSprite.src = PLAYER_SPRITE_SRC;
-  
-  let npc1Sprite = new Image();
-  npc1Sprite.src = NPC1_SPRITE_SRC;
-  
-  let npc2Sprite = new Image();
-  npc2Sprite.src = NPC2_SPRITE_SRC;
-  
-  // Set initial NPC positions (in pixels)
-  let npc1 = {
-    x: 100, 
-    y: 100,
-    width: 32,
-    height: 32
-  };
-  let npc2 = {
-    x: 600,
-    y: 300,
-    width: 32,
-    height: 32
-  };
-
-  // ====================================================
-  // GLOBAL VARIABLES & SETTINGS
-  // ====================================================
-  const canvas = document.getElementById("gameCanvas");
-  const ctx = canvas.getContext("2d");
-  const gridSize = 32; // each grid cell is 32x32 pixels
-  const cols = Math.floor(canvas.width / gridSize);
-  const rows = Math.floor(canvas.height / gridSize);
-
-  // Colors
-  const sandColor       = "#F4A460"; // light sand (background)
-  const defaultDugColor = "#CD853F"; // darker sand (dug-up)
-  const rockColor       = "#808080"; // rocks
-  const waterColor      = "#00BFFF"; // water
-  // (Player is now drawn as a sprite.)
-  const treasureColor   = "gold";    // treasure revealed
-  const trashColor      = "brown";   // trash revealed
-
-  // Water area: bottom rows are water.
-  const waterRows = 2;
-
-  // Player (continuous pixel coordinates) – 1 cell wide, 2 cells high.
-  let player = {
-    x: canvas.width / 2 - gridSize / 2,
-    y: ((rows - waterRows) * gridSize) / 2 - gridSize,
-    width: gridSize,
-    height: gridSize * 2
-  };
-
-  // Key state for continuous movement.
-  const keys = {};
-  let debugRevealHidden = false;
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      paused = true;
-      menuDiv.style.display = "flex";
-      return;
-    }
-    if (e.key === "y" || e.key === "Y") {
-      debugRevealHidden = !debugRevealHidden;
-      return;
-    }
-    keys[e.key] = true;
-  });
-  document.addEventListener("keyup", (e) => { keys[e.key] = false; });
-  const playerSpeed = 200; // pixels per second
-
-  // Arrays for obstacles and hidden objects (grid-based).
-  let rocks = [];
-  let hiddenObjects = []; // Each hidden object: { x, y, type } (type: "treasure" or "trash")
-  let dugTiles = {};      // keys "col,row" => { color }
-
-  // Particle system for sand particles.
-  let particles = [];
-
-  // Metal detector (visual beep indicator).
-  // Expanded detection radius: gridSize * 4.
-  let detectionRadius = gridSize * 4;
-  let beepInterval = 1000; // ms, adjusted by proximity.
-  let nextFlashTime = 0;
-  let flashEndTime = 0;
-  const flashDuration = 100; // ms
-  let detectorFlashActive = false;
-  let prevBeepInterval = 1000;
-
-  // Water animation (randomized arcs).
-  const cpSpacing = 50;
-  const waveAnimationSpeed = 0.001; // slower animation speed
-  const maxWaveHeight = 30;
-  let controlPoints = [];
-
-  // Timing.
-  let lastTimestamp = 0;
-
-  // Pause and next area popup.
-  let paused = false;
-  const menuDiv = document.getElementById("menu");
-  const resumeBtn = document.getElementById("resumeBtn");
-  const exitBtn = document.getElementById("exitBtn");
-  const nextAreaPopup = document.getElementById("nextAreaPopup");
-  const nextAreaBtn = document.getElementById("nextAreaBtn");
-  resumeBtn.addEventListener("click", () => {
-    paused = false;
-    menuDiv.style.display = "none";
-  });
-  exitBtn.addEventListener("click", () => { window.location.href = "index.html"; });
-  nextAreaBtn.addEventListener("click", nextArea);
-
-  // Treasure counters.
-  let cumulativeTreasures = 0;    // overall count
-  let currentMapTreasureCount = 0; // total treasures in current map
-  let foundMapTreasures = 0;       // treasures found in current map
-
-  // ====================================================
-  // COLLISION UTILITY (only bottom half of player collides)
-  // ====================================================
-  function getPlayerCollisionRect() {
-    return {
-      x: player.x,
-      y: player.y + player.height / 2,
-      width: player.width,
-      height: player.height / 2
+  <div id="counter">Treasures found: 0</div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <!-- Pause menu overlay -->
+  <div id="menu">
+    <button id="resumeBtn">Resume</button>
+    <button id="exitBtn">Exit</button>
+  </div>
+  <!-- Next area popup -->
+  <div id="nextAreaPopup">
+    <div style="color:white; font-size: 24px; margin-bottom: 20px;">You found all the treasure!</div>
+    <button id="nextAreaBtn">Next Area -></button>
+  </div>
+  <script>
+    // ====================================================
+    // SPRITE REFERENCES & NPC LOCATIONS (Easily configurable)
+    // ====================================================
+    const PLAYER_SPRITE_SRC = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/detectorist.png";
+    const NPC1_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/beachgoer.png";
+    const NPC2_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/salesman.png";
+    
+    let playerSprite = new Image();
+    playerSprite.src = PLAYER_SPRITE_SRC;
+    
+    let npc1Sprite = new Image();
+    npc1Sprite.src = NPC1_SPRITE_SRC;
+    
+    let npc2Sprite = new Image();
+    npc2Sprite.src = NPC2_SPRITE_SRC;
+    
+    // Set initial NPC positions and collision dimensions.
+    // Added spriteWidth and spriteHeight for graphical rendering.
+    let npc1 = {
+      x: 100, 
+      y: 100,
+      width: 32,
+      height: 32,
+      spriteWidth: 48,    // custom drawn width
+      spriteHeight: 48    // custom drawn height
     };
-  }
-  function rectsCollide(rect1, rect2) {
-    return rect1.x < rect2.x + rect2.width &&
-           rect1.x + rect1.width > rect2.x &&
-           rect1.y < rect2.y + rect2.height &&
-           rect1.y + rect1.height > rect2.y;
-  }
+    let npc2 = {
+      x: 600,
+      y: 300,
+      width: 32,
+      height: 32,
+      spriteWidth: 48,    // custom drawn width
+      spriteHeight: 48    // custom drawn height
+    };
 
-  // ====================================================
-  // SIMPLE DIGGING MECHANIC (by clicking a tile)
-  // ====================================================
-  // Convert mouse coordinates to a grid tile; if that tile is within a fixed radius (in grid cells)
-  // from the player's feet (bottom center), then dig it.
-  const digRadius = 3; // expanded from 2 to 3 grid cells
-  canvas.addEventListener("mousedown", (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const tileCol = Math.floor(mouseX / gridSize);
-    const tileRow = Math.floor(mouseY / gridSize);
-    if (tileRow >= rows - waterRows) return; // clicked in water
+    // ====================================================
+    // GLOBAL VARIABLES & SETTINGS
+    // ====================================================
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const gridSize = 32; // each grid cell is 32x32 pixels
+    const cols = Math.floor(canvas.width / gridSize);
+    const rows = Math.floor(canvas.height / gridSize);
 
-    // Player's feet grid coordinate.
-    const playerFeetX = Math.floor((player.x + player.width / 2) / gridSize);
-    const playerFeetY = Math.floor((player.y + player.height) / gridSize);
-    const dx = tileCol - playerFeetX;
-    const dy = tileRow - playerFeetY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > digRadius) return; // too far to dig
+    // Colors
+    const sandColor       = "#F4A460"; // light sand (background)
+    const defaultDugColor = "#CD853F"; // darker sand (dug-up)
+    const rockColor       = "#808080"; // rocks
+    const waterColor      = "#00BFFF"; // water
+    const treasureColor   = "gold";    // treasure revealed
+    const trashColor      = "brown";   // trash revealed
 
-    const key = tileCol + "," + tileRow;
-    if (dugTiles[key]) return; // already dug
+    // Water area: bottom rows are water.
+    const waterRows = 2;
 
-    // Check for a hidden object.
-    let foundItem = null;
-    for (let i = 0; i < hiddenObjects.length; i++) {
-      const item = hiddenObjects[i];
-      if (item.x === tileCol && item.y === tileRow) {
-        foundItem = item;
-        hiddenObjects.splice(i, 1); // remove so it stops beeping
-        break;
+    // Player (continuous pixel coordinates).
+    // The collision box remains gridSize by gridSize*2.
+    // We add spriteWidth and spriteHeight for the drawn sprite.
+    let player = {
+      x: canvas.width / 2 - gridSize / 2,
+      y: ((rows - waterRows) * gridSize) / 2 - gridSize,
+      width: gridSize,
+      height: gridSize * 2,
+      spriteWidth: 64,    // custom drawn width
+      spriteHeight: 96    // custom drawn height
+    };
+
+    // Key state for continuous movement.
+    const keys = {};
+    let debugRevealHidden = false;
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        paused = true;
+        menuDiv.style.display = "flex";
+        return;
       }
-    }
-    if (foundItem) {
-      dugTiles[key] = { color: (foundItem.type === "treasure" ? treasureColor : trashColor) };
-      if (foundItem.type === "treasure") {
-        foundMapTreasures++;
-        cumulativeTreasures++;
+      if (e.key === "y" || e.key === "Y") {
+        debugRevealHidden = !debugRevealHidden;
+        return;
       }
-    } else {
-      dugTiles[key] = { color: defaultDugColor };
-    }
-    // Spawn sand particles.
-    const tileCenterX = tileCol * gridSize + gridSize / 2;
-    const tileCenterY = tileRow * gridSize + gridSize / 2;
-    spawnSandParticles(tileCenterX, tileCenterY);
-  });
+      keys[e.key] = true;
+    });
+    document.addEventListener("keyup", (e) => { keys[e.key] = false; });
+    const playerSpeed = 200; // pixels per second
 
-  // ====================================================
-  // PARTICLE SYSTEM
-  // ====================================================
-  function spawnSandParticles(x, y) {
-    const numParticles = 10;
-    for (let i = 0; i < numParticles; i++) {
-      const angle = Math.random() * 2 * Math.PI;
-      const speed = Math.random() * 50 + 30;
-      const vx = Math.cos(angle) * speed;
-      const vy = Math.sin(angle) * speed;
-      const lifetime = Math.random() * 0.5 + 0.5;
-      const color = Math.random() < 0.5 ? sandColor : defaultDugColor;
-      particles.push({ x, y, vx, vy, lifetime, color });
-    }
-  }
-  function updateParticles(delta) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      let p = particles[i];
-      p.x += p.vx * delta;
-      p.y += p.vy * delta;
-      p.lifetime -= delta;
-      if (p.lifetime <= 0) particles.splice(i, 1);
-    }
-  }
+    // Arrays for obstacles and hidden objects (grid-based).
+    let rocks = [];
+    let hiddenObjects = []; // Each hidden object: { x, y, type } (type: "treasure" or "trash")
+    let dugTiles = {};      // keys "col,row" => { color }
 
-  // ====================================================
-  // INITIALIZE GAME (map)
-  // ====================================================
-  function initGame() {
-    // Place rocks randomly.
-    rocks = [];
-    for (let i = 0; i < 10; i++) {
-      let rockX = Math.floor(Math.random() * cols);
-      let rockY = Math.floor(Math.random() * (rows - waterRows));
-      rocks.push({ x: rockX, y: rockY });
+    // Particle system for sand particles.
+    let particles = [];
+
+    // Metal detector (visual beep indicator).
+    let detectionRadius = gridSize * 4;
+    let beepInterval = 1000; // ms, adjusted by proximity.
+    let nextFlashTime = 0;
+    let flashEndTime = 0;
+    const flashDuration = 100; // ms
+    let detectorFlashActive = false;
+    let prevBeepInterval = 1000;
+
+    // Water animation (randomized arcs).
+    const cpSpacing = 50;
+    const waveAnimationSpeed = 0.001;
+    const maxWaveHeight = 30;
+    let controlPoints = [];
+
+    // Timing.
+    let lastTimestamp = 0;
+
+    // Pause and next area popup.
+    let paused = false;
+    const menuDiv = document.getElementById("menu");
+    const resumeBtn = document.getElementById("resumeBtn");
+    const exitBtn = document.getElementById("exitBtn");
+    const nextAreaPopup = document.getElementById("nextAreaPopup");
+    const nextAreaBtn = document.getElementById("nextAreaBtn");
+    resumeBtn.addEventListener("click", () => {
+      paused = false;
+      menuDiv.style.display = "none";
+    });
+    exitBtn.addEventListener("click", () => { window.location.href = "index.html"; });
+    nextAreaBtn.addEventListener("click", nextArea);
+
+    // Treasure counters.
+    let cumulativeTreasures = 0;    // overall count
+    let currentMapTreasureCount = 0; // total treasures in current map
+    let foundMapTreasures = 0;       // treasures found in current map
+
+    // ====================================================
+    // COLLISION UTILITY (only bottom half of player collides)
+    // ====================================================
+    function getPlayerCollisionRect() {
+      return {
+        x: player.x,
+        y: player.y + player.height / 2,
+        width: player.width,
+        height: player.height / 2
+      };
     }
-    // Place hidden objects.
-    hiddenObjects = [];
-    // Ensure at least one treasure, plus 1–3 extra items.
-    let extraCount = Math.floor(Math.random() * 3) + 1;
-    let totalHidden = 1 + extraCount;
-    let placed = 0;
-    while (placed < totalHidden) {
-      let valid = false;
-      let objX, objY;
-      while (!valid) {
-        objX = Math.floor(Math.random() * cols);
-        objY = Math.floor(Math.random() * (rows - waterRows));
-        valid = true;
-        for (let rock of rocks) {
-          if (rock.x === objX && rock.y === objY) {
-            valid = false;
-            break;
-          }
+    function rectsCollide(rect1, rect2) {
+      return rect1.x < rect2.x + rect2.width &&
+             rect1.x + rect1.width > rect2.x &&
+             rect1.y < rect2.y + rect2.height &&
+             rect1.y + rect1.height > rect2.y;
+    }
+
+    // ====================================================
+    // SIMPLE DIGGING MECHANIC (by clicking a tile)
+    // ====================================================
+    const digRadius = 3; // expanded from 2 to 3 grid cells
+    canvas.addEventListener("mousedown", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const tileCol = Math.floor(mouseX / gridSize);
+      const tileRow = Math.floor(mouseY / gridSize);
+      if (tileRow >= rows - waterRows) return; // clicked in water
+
+      // Player's feet grid coordinate.
+      const playerFeetX = Math.floor((player.x + player.width / 2) / gridSize);
+      const playerFeetY = Math.floor((player.y + player.height) / gridSize);
+      const dx = tileCol - playerFeetX;
+      const dy = tileRow - playerFeetY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > digRadius) return; // too far to dig
+
+      const key = tileCol + "," + tileRow;
+      if (dugTiles[key]) return; // already dug
+
+      // Check for a hidden object.
+      let foundItem = null;
+      for (let i = 0; i < hiddenObjects.length; i++) {
+        const item = hiddenObjects[i];
+        if (item.x === tileCol && item.y === tileRow) {
+          foundItem = item;
+          hiddenObjects.splice(i, 1); // remove so it stops beeping
+          break;
         }
       }
-      let type = (placed === 0) ? "treasure" : (Math.random() < 0.5 ? "treasure" : "trash");
-      hiddenObjects.push({ x: objX, y: objY, type: type });
-      placed++;
-    }
-    currentMapTreasureCount = hiddenObjects.filter(obj => obj.type === "treasure").length;
-    foundMapTreasures = 0;
-    dugTiles = {};
-    particles = [];
-    // Initialize water control points.
-    controlPoints = [];
-    const cpCount = Math.ceil(canvas.width / cpSpacing) + 1;
-    for (let i = 0; i < cpCount; i++) {
-      controlPoints.push({
-        x: i * cpSpacing,
-        phase: Math.random() * Math.PI * 2,
-        speed: waveAnimationSpeed * (0.5 + Math.random()),
-        current: 0
-      });
-    }
-    // Reset player location.
-    player.x = canvas.width / 2 - gridSize / 2;
-    player.y = ((rows - waterRows) * gridSize) / 2 - gridSize;
-    // Optionally, reset NPC positions or leave them as is.
-  }
+      if (foundItem) {
+        dugTiles[key] = { color: (foundItem.type === "treasure" ? treasureColor : trashColor) };
+        if (foundItem.type === "treasure") {
+          foundMapTreasures++;
+          cumulativeTreasures++;
+        }
+      } else {
+        dugTiles[key] = { color: defaultDugColor };
+      }
+      // Spawn sand particles.
+      const tileCenterX = tileCol * gridSize + gridSize / 2;
+      const tileCenterY = tileRow * gridSize + gridSize / 2;
+      spawnSandParticles(tileCenterX, tileCenterY);
+    });
 
-  // ====================================================
-  // GAME LOOP FUNCTIONS
-  // ====================================================
-  function gameLoop(timestamp) {
-    if (!lastTimestamp) lastTimestamp = timestamp;
-    const delta = (timestamp - lastTimestamp) / 1000;
-    lastTimestamp = timestamp;
-    if (!paused) update(delta, timestamp);
-    draw();
-    requestAnimationFrame(gameLoop);
-  }
-  function update(delta, timestamp) {
-    // Save old player position.
-    let oldX = player.x, oldY = player.y;
-    let dx = 0, dy = 0;
-    if (keys["ArrowUp"] || keys["w"]) dy = -playerSpeed * delta;
-    if (keys["ArrowDown"] || keys["s"]) dy = playerSpeed * delta;
-    if (keys["ArrowLeft"] || keys["a"]) dx = -playerSpeed * delta;
-    if (keys["ArrowRight"] || keys["d"]) dx = playerSpeed * delta;
-    
-    player.x += dx;
-    if (player.x < 0) player.x = 0;
-    if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
-    // Collision only using bottom half of the player.
-    let collisionRect = {
-      x: player.x,
-      y: player.y + player.height / 2,
-      width: player.width,
-      height: player.height / 2
-    };
-    for (let rock of rocks) {
-      let rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
-      if (rectsCollide(collisionRect, rockRect)) { player.x = oldX; break; }
-    }
-    
-    player.y += dy;
-    const maxY = (rows - waterRows) * gridSize - player.height;
-    if (player.y < 0) player.y = 0;
-    if (player.y > maxY) player.y = maxY;
-    collisionRect = {
-      x: player.x,
-      y: player.y + player.height / 2,
-      width: player.width,
-      height: player.height / 2
-    };
-    for (let rock of rocks) {
-      let rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
-      if (rectsCollide(collisionRect, rockRect)) { player.y = oldY; break; }
-    }
-    
-    // Update water control points.
-    controlPoints.forEach(cp => {
-      cp.current = ((Math.sin(cp.phase + timestamp * cp.speed) + 1) / 2) * maxWaveHeight;
-    });
-    updateParticles(delta);
-    
-    // Metal detector: compute player's center.
-    const playerCenterX = player.x + player.width / 2;
-    const playerCenterY = player.y + player.height / 2;
-    let minDistance = Infinity;
-    hiddenObjects.forEach(obj => {
-      const objCenterX = obj.x * gridSize + gridSize / 2;
-      const objCenterY = obj.y * gridSize + gridSize / 2;
-      const dxObj = playerCenterX - objCenterX;
-      const dyObj = playerCenterY - objCenterY;
-      const dist = Math.sqrt(dxObj * dxObj + dyObj * dyObj);
-      if (dist < minDistance) minDistance = dist;
-    });
-    if (minDistance < detectionRadius) {
-      let newInterval = 200 + (minDistance / detectionRadius) * 800;
-      if (newInterval < prevBeepInterval) {
-        nextFlashTime = timestamp;
+    // ====================================================
+    // PARTICLE SYSTEM
+    // ====================================================
+    function spawnSandParticles(x, y) {
+      const numParticles = 10;
+      for (let i = 0; i < numParticles; i++) {
+        const angle = Math.random() * 2 * Math.PI;
+        const speed = Math.random() * 50 + 30;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+        const lifetime = Math.random() * 0.5 + 0.5;
+        const color = Math.random() < 0.5 ? sandColor : defaultDugColor;
+        particles.push({ x, y, vx, vy, lifetime, color });
       }
-      prevBeepInterval = newInterval;
-      beepInterval = newInterval;
-      if (timestamp >= nextFlashTime) {
-        detectorFlashActive = true;
-        flashEndTime = timestamp + flashDuration;
-        nextFlashTime = timestamp + beepInterval;
+    }
+    function updateParticles(delta) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx * delta;
+        p.y += p.vy * delta;
+        p.lifetime -= delta;
+        if (p.lifetime <= 0) particles.splice(i, 1);
       }
-      if (detectorFlashActive && timestamp > flashEndTime) detectorFlashActive = false;
-    } else {
-      detectorFlashActive = false;
-      nextFlashTime = timestamp + 1000;
     }
-    
-    // If all treasures in the map have been found, show next area popup.
-    if (foundMapTreasures >= currentMapTreasureCount && currentMapTreasureCount > 0) {
-      nextAreaPopup.style.display = "flex";
-    }
-    
-    // Update counter.
-    document.getElementById("counter").innerText = "Treasures found: " + cumulativeTreasures;
-  }
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw sand background.
-    ctx.fillStyle = sandColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw dug tiles.
-    for (let key in dugTiles) {
-      const [col, row] = key.split(",").map(Number);
-      ctx.fillStyle = dugTiles[key].color;
-      ctx.fillRect(col * gridSize, row * gridSize, gridSize, gridSize);
-    }
-    
-    // Draw water area (randomized vertical arcs).
-    const baseWaterY = (rows - waterRows) * gridSize;
-    ctx.beginPath();
-    ctx.moveTo(0, baseWaterY);
-    if (controlPoints.length > 0) {
-      let firstX = controlPoints[0].x;
-      let firstY = baseWaterY - controlPoints[0].current;
-      ctx.lineTo(firstX, firstY);
-      for (let i = 0; i < controlPoints.length - 1; i++) {
-        let cp1 = controlPoints[i], cp2 = controlPoints[i+1];
-        let x1 = cp1.x, y1 = baseWaterY - cp1.current;
-        let x2 = cp2.x, y2 = baseWaterY - cp2.current;
-        let midX = (x1+x2)/2, midY = (y1+y2)/2;
-        ctx.quadraticCurveTo(x1, y1, midX, midY);
+
+    // ====================================================
+    // INITIALIZE GAME (map)
+    // ====================================================
+    function initGame() {
+      // Place rocks randomly.
+      rocks = [];
+      for (let i = 0; i < 10; i++) {
+        let rockX = Math.floor(Math.random() * cols);
+        let rockY = Math.floor(Math.random() * (rows - waterRows));
+        rocks.push({ x: rockX, y: rockY });
       }
-      let lastCP = controlPoints[controlPoints.length - 1];
-      ctx.lineTo(lastCP.x, baseWaterY - lastCP.current);
+      // Place hidden objects.
+      hiddenObjects = [];
+      let extraCount = Math.floor(Math.random() * 3) + 1;
+      let totalHidden = 1 + extraCount;
+      let placed = 0;
+      while (placed < totalHidden) {
+        let valid = false;
+        let objX, objY;
+        while (!valid) {
+          objX = Math.floor(Math.random() * cols);
+          objY = Math.floor(Math.random() * (rows - waterRows));
+          valid = true;
+          for (let rock of rocks) {
+            if (rock.x === objX && rock.y === objY) {
+              valid = false;
+              break;
+            }
+          }
+        }
+        let type = (placed === 0) ? "treasure" : (Math.random() < 0.5 ? "treasure" : "trash");
+        hiddenObjects.push({ x: objX, y: objY, type: type });
+        placed++;
+      }
+      currentMapTreasureCount = hiddenObjects.filter(obj => obj.type === "treasure").length;
+      foundMapTreasures = 0;
+      dugTiles = {};
+      particles = [];
+      // Initialize water control points.
+      controlPoints = [];
+      const cpCount = Math.ceil(canvas.width / cpSpacing) + 1;
+      for (let i = 0; i < cpCount; i++) {
+        controlPoints.push({
+          x: i * cpSpacing,
+          phase: Math.random() * Math.PI * 2,
+          speed: waveAnimationSpeed * (0.5 + Math.random()),
+          current: 0
+        });
+      }
+      // Reset player location.
+      player.x = canvas.width / 2 - gridSize / 2;
+      player.y = ((rows - waterRows) * gridSize) / 2 - gridSize;
     }
-    ctx.lineTo(canvas.width, baseWaterY);
-    ctx.lineTo(canvas.width, canvas.height);
-    ctx.lineTo(0, canvas.height);
-    ctx.closePath();
-    ctx.fillStyle = waterColor;
-    ctx.fill();
-    
-    // Draw rocks.
-    rocks.forEach(rock => {
-      ctx.fillStyle = rockColor;
-      ctx.fillRect(rock.x * gridSize, rock.y * gridSize, gridSize, gridSize);
-    });
-    
-    // Draw NPCs (using sprites).
-    ctx.drawImage(npc1Sprite, npc1.x, npc1.y, npc1.width, npc1.height);
-    ctx.drawImage(npc2Sprite, npc2.x, npc2.y, npc2.width, npc2.height);
-    
-    // Draw the player (using sprite).
-    ctx.drawImage(playerSprite, player.x, player.y, player.width, player.height);
-    
-    // Draw sand particles.
-    particles.forEach(p => {
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, 2, 2);
-    });
-    
-    // If debug flag is on, draw hidden objects.
-    if (debugRevealHidden) {
-      hiddenObjects.forEach(obj => {
-        ctx.strokeStyle = "rgba(0,0,0,0.8)";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(obj.x * gridSize, obj.y * gridSize, gridSize, gridSize);
+
+    // ====================================================
+    // GAME LOOP FUNCTIONS
+    // ====================================================
+    function gameLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+      if (!paused) update(delta, timestamp);
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+    function update(delta, timestamp) {
+      let oldX = player.x, oldY = player.y;
+      let dx = 0, dy = 0;
+      if (keys["ArrowUp"] || keys["w"]) dy = -playerSpeed * delta;
+      if (keys["ArrowDown"] || keys["s"]) dy = playerSpeed * delta;
+      if (keys["ArrowLeft"] || keys["a"]) dx = -playerSpeed * delta;
+      if (keys["ArrowRight"] || keys["d"]) dx = playerSpeed * delta;
+      
+      player.x += dx;
+      if (player.x < 0) player.x = 0;
+      if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+      let collisionRect = {
+        x: player.x,
+        y: player.y + player.height / 2,
+        width: player.width,
+        height: player.height / 2
+      };
+      for (let rock of rocks) {
+        let rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
+        if (rectsCollide(collisionRect, rockRect)) { player.x = oldX; break; }
+      }
+      
+      player.y += dy;
+      const maxY = (rows - waterRows) * gridSize - player.height;
+      if (player.y < 0) player.y = 0;
+      if (player.y > maxY) player.y = maxY;
+      collisionRect = {
+        x: player.x,
+        y: player.y + player.height / 2,
+        width: player.width,
+        height: player.height / 2
+      };
+      for (let rock of rocks) {
+        let rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
+        if (rectsCollide(collisionRect, rockRect)) { player.y = oldY; break; }
+      }
+      
+      controlPoints.forEach(cp => {
+        cp.current = ((Math.sin(cp.phase + timestamp * cp.speed) + 1) / 2) * maxWaveHeight;
       });
+      updateParticles(delta);
+      
+      const playerCenterX = player.x + player.width / 2;
+      const playerCenterY = player.y + player.height / 2;
+      let minDistance = Infinity;
+      hiddenObjects.forEach(obj => {
+        const objCenterX = obj.x * gridSize + gridSize / 2;
+        const objCenterY = obj.y * gridSize + gridSize / 2;
+        const dxObj = playerCenterX - objCenterX;
+        const dyObj = playerCenterY - objCenterY;
+        const dist = Math.sqrt(dxObj * dxObj + dyObj * dyObj);
+        if (dist < minDistance) minDistance = dist;
+      });
+      if (minDistance < detectionRadius) {
+        let newInterval = 200 + (minDistance / detectionRadius) * 800;
+        if (newInterval < prevBeepInterval) {
+          nextFlashTime = timestamp;
+        }
+        prevBeepInterval = newInterval;
+        beepInterval = newInterval;
+        if (timestamp >= nextFlashTime) {
+          detectorFlashActive = true;
+          flashEndTime = timestamp + flashDuration;
+          nextFlashTime = timestamp + beepInterval;
+        }
+        if (detectorFlashActive && timestamp > flashEndTime) detectorFlashActive = false;
+      } else {
+        detectorFlashActive = false;
+        nextFlashTime = timestamp + 1000;
+      }
+      
+      if (foundMapTreasures >= currentMapTreasureCount && currentMapTreasureCount > 0) {
+        nextAreaPopup.style.display = "flex";
+      }
+      
+      document.getElementById("counter").innerText = "Treasures found: " + cumulativeTreasures;
+    }
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.fillStyle = sandColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      for (let key in dugTiles) {
+        const [col, row] = key.split(",").map(Number);
+        ctx.fillStyle = dugTiles[key].color;
+        ctx.fillRect(col * gridSize, row * gridSize, gridSize, gridSize);
+      }
+      
+      const baseWaterY = (rows - waterRows) * gridSize;
+      ctx.beginPath();
+      ctx.moveTo(0, baseWaterY);
+      if (controlPoints.length > 0) {
+        let firstX = controlPoints[0].x;
+        let firstY = baseWaterY - controlPoints[0].current;
+        ctx.lineTo(firstX, firstY);
+        for (let i = 0; i < controlPoints.length - 1; i++) {
+          let cp1 = controlPoints[i], cp2 = controlPoints[i+1];
+          let x1 = cp1.x, y1 = baseWaterY - cp1.current;
+          let x2 = cp2.x, y2 = baseWaterY - cp2.current;
+          let midX = (x1+x2)/2, midY = (y1+y2)/2;
+          ctx.quadraticCurveTo(x1, y1, midX, midY);
+        }
+        let lastCP = controlPoints[controlPoints.length - 1];
+        ctx.lineTo(lastCP.x, baseWaterY - lastCP.current);
+      }
+      ctx.lineTo(canvas.width, baseWaterY);
+      ctx.lineTo(canvas.width, canvas.height);
+      ctx.lineTo(0, canvas.height);
+      ctx.closePath();
+      ctx.fillStyle = waterColor;
+      ctx.fill();
+      
+      rocks.forEach(rock => {
+        ctx.fillStyle = rockColor;
+        ctx.fillRect(rock.x * gridSize, rock.y * gridSize, gridSize, gridSize);
+      });
+      
+      // Draw NPCs with custom sprite dimensions.
+      let npc1OffsetX = (npc1.spriteWidth - npc1.width) / 2;
+      let npc1OffsetY = npc1.spriteHeight - npc1.height;
+      ctx.drawImage(npc1Sprite, npc1.x - npc1OffsetX, npc1.y - npc1OffsetY, npc1.spriteWidth, npc1.spriteHeight);
+      
+      let npc2OffsetX = (npc2.spriteWidth - npc2.width) / 2;
+      let npc2OffsetY = npc2.spriteHeight - npc2.height;
+      ctx.drawImage(npc2Sprite, npc2.x - npc2OffsetX, npc2.y - npc2OffsetY, npc2.spriteWidth, npc2.spriteHeight);
+      
+      // Draw the player with custom sprite dimensions.
+      let playerOffsetX = (player.spriteWidth - player.width) / 2;
+      let playerOffsetY = player.spriteHeight - player.height;
+      ctx.drawImage(playerSprite, player.x - playerOffsetX, player.y - playerOffsetY, player.spriteWidth, player.spriteHeight);
+      
+      particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 2, 2);
+      });
+      
+      if (debugRevealHidden) {
+        hiddenObjects.forEach(obj => {
+          ctx.strokeStyle = "rgba(0,0,0,0.8)";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(obj.x * gridSize, obj.y * gridSize, gridSize, gridSize);
+        });
+      }
+      
+      if (detectorFlashActive) {
+        ctx.fillStyle = "black";
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("BEEP", player.x + player.width / 2, player.y - 5);
+      }
     }
     
-    // Draw metal detector "BEEP" indicator.
-    if (detectorFlashActive) {
-      ctx.fillStyle = "black";
-      ctx.font = "bold 16px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("BEEP", player.x + player.width / 2, player.y - 5);
+    function nextArea() {
+      nextAreaPopup.style.display = "none";
+      initGame();
     }
-  }
-  
-  // ====================================================
-  // NEXT AREA FUNCTION
-  // ====================================================
-  function nextArea() {
-    nextAreaPopup.style.display = "none";
+    
     initGame();
-  }
-  
-  // ====================================================
-  // INITIALIZE & START GAME
-  // ====================================================
-  initGame();
-  requestAnimationFrame(gameLoop);
-</script>
+    requestAnimationFrame(gameLoop);
+  </script>
 </body>
 </html>
