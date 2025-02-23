@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Beach Beeper</title>
+  <style>
+    body {
+      margin: 0;
+      background: #87CEEB; /* Sky blue */
+    }
+    canvas {
+      display: block;
+      margin: 20px auto;
+      background: #F4A460; /* Sand color */
+      border: 2px solid #000;
+    }
+    /* Pause menu overlay styling */
+    #menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 100;
+    }
+    #menu button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<!-- Pause menu overlay -->
+<div id="menu">
+  <button id="resumeBtn">Resume</button>
+  <button id="exitBtn">Exit</button>
+</div>
+<script>
+  // -------------------------
+  // GLOBAL VARIABLES & SETTINGS
+  // -------------------------
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const gridSize = 32; // each grid cell is 32x32 pixels
+  const cols = Math.floor(canvas.width / gridSize);
+  const rows = Math.floor(canvas.height / gridSize);
+
+  // Color variables
+  const sandColor    = "#F4A460"; // sand
+  const rockColor    = "#808080"; // rocks
+  const waterColor   = "#00BFFF"; // water
+  const playerColor  = "#FF4500"; // player
+  const treasureColor = "gold";   // treasure (hidden)
+  const trashColor    = "brown";  // trash (hidden)
+
+  // Define water area: bottom rows are water
+  const waterRows = 2;
+
+  // Player uses continuous pixel coordinates.
+  // It remains 1 cell wide and 2 cells high.
+  let player = {
+    x: canvas.width / 2 - gridSize / 2,   // centered horizontally
+    y: ((rows - waterRows) * gridSize) / 2 - gridSize, // centered on sand
+    width: gridSize,
+    height: gridSize * 2
+  };
+
+  // Set up key state for continuous movement.
+  const keys = {};
+  document.addEventListener("keydown", (e) => {
+    // Pause if Escape is pressed.
+    if (e.key === "Escape") {
+      paused = true;
+      menuDiv.style.display = "flex";
+      return;
+    }
+    keys[e.key] = true;
+  });
+  document.addEventListener("keyup", (e) => {
+    keys[e.key] = false;
+  });
+  // Player speed in pixels per second.
+  const playerSpeed = 200;
+
+  // Arrays for obstacles and hidden objects (grid-based).
+  let rocks = [];
+  let hiddenObjects = [];
+
+  // Metal detection settings (visual beep indicator).
+  const detectionRadius = gridSize * 3;
+  let beepInterval = 1000; // milliseconds, adjusted by proximity.
+  let nextFlashTime = 0;
+  let flashEndTime = 0;
+  const flashDuration = 100; // duration of visual "BEEP" (ms)
+  let detectorFlashActive = false;
+
+  // -------------------------
+  // WATER ANIMATION VARIABLES (randomized arcs)
+  // -------------------------
+  const cpSpacing = 50;             // spacing between control points in pixels.
+  const waveAnimationSpeed = 0.001; // lower = slower animation.
+  const maxWaveHeight = 30;         // maximum vertical height for the wave crest.
+  let controlPoints = [];           // control points for the water crest.
+
+  // For continuous movement, store last timestamp.
+  let lastTimestamp = 0;
+
+  // Pause state and menu handling.
+  let paused = false;
+  const menuDiv = document.getElementById("menu");
+  const resumeBtn = document.getElementById("resumeBtn");
+  const exitBtn = document.getElementById("exitBtn");
+
+  resumeBtn.addEventListener("click", () => {
+    paused = false;
+    menuDiv.style.display = "none";
+  });
+  exitBtn.addEventListener("click", () => {
+    window.location.href = "index.html";
+  });
+
+  // -------------------------
+  // COLLISION DETECTION UTILITY
+  // -------------------------
+  function rectsCollide(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+  }
+
+  // -------------------------
+  // INITIALIZE GAME OBJECTS
+  // -------------------------
+  function initGame() {
+    // Place rocks randomly on the sand (avoid the water area).
+    rocks = [];
+    for (let i = 0; i < 10; i++) {
+      let rockX = Math.floor(Math.random() * cols);
+      let rockY = Math.floor(Math.random() * (rows - waterRows));
+      rocks.push({ x: rockX, y: rockY });
+    }
+    // Place hidden objects (treasure or trash) randomly under the sand.
+    hiddenObjects = [];
+    for (let i = 0; i < 5; i++) {
+      let objX = Math.floor(Math.random() * cols);
+      let objY = Math.floor(Math.random() * (rows - waterRows));
+      let type = Math.random() < 0.5 ? "treasure" : "trash";
+      hiddenObjects.push({ x: objX, y: objY, type: type });
+    }
+    // Initialize water control points for randomized arcs.
+    controlPoints = [];
+    const cpCount = Math.ceil(canvas.width / cpSpacing) + 1;
+    for (let i = 0; i < cpCount; i++) {
+      controlPoints.push({
+        x: i * cpSpacing,
+        phase: Math.random() * Math.PI * 2,
+        speed: waveAnimationSpeed * (0.5 + Math.random()),
+        current: 0
+      });
+    }
+  }
+
+  // -------------------------
+  // GAME LOOP FUNCTIONS
+  // -------------------------
+  function gameLoop(timestamp) {
+    if (!lastTimestamp) lastTimestamp = timestamp;
+    const delta = (timestamp - lastTimestamp) / 1000; // delta in seconds.
+    lastTimestamp = timestamp;
+    if (!paused) {
+      update(delta, timestamp);
+    }
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function update(delta, timestamp) {
+    // Save old position for collision testing.
+    let oldX = player.x, oldY = player.y;
+    let dx = 0, dy = 0;
+    if (keys["ArrowUp"] || keys["w"]) { dy = -playerSpeed * delta; }
+    if (keys["ArrowDown"] || keys["s"]) { dy = playerSpeed * delta; }
+    if (keys["ArrowLeft"] || keys["a"]) { dx = -playerSpeed * delta; }
+    if (keys["ArrowRight"] || keys["d"]) { dx = playerSpeed * delta; }
+    
+    // Attempt horizontal movement.
+    player.x += dx;
+    if (player.x < 0) player.x = 0;
+    if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+    for (let rock of rocks) {
+      const rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
+      if (rectsCollide(player, rockRect)) {
+        player.x = oldX; // revert horizontal movement
+        break;
+      }
+    }
+    
+    // Attempt vertical movement.
+    player.y += dy;
+    const maxY = (rows - waterRows) * gridSize - player.height;
+    if (player.y < 0) player.y = 0;
+    if (player.y > maxY) player.y = maxY;
+    for (let rock of rocks) {
+      const rockRect = { x: rock.x * gridSize, y: rock.y * gridSize, width: gridSize, height: gridSize };
+      if (rectsCollide(player, rockRect)) {
+        player.y = oldY; // revert vertical movement
+        break;
+      }
+    }
+
+    // Update water control points.
+    controlPoints.forEach(cp => {
+      cp.current = ((Math.sin(cp.phase + timestamp * cp.speed) + 1) / 2) * maxWaveHeight;
+    });
+
+    // Compute player's center (in pixels).
+    const playerCenterX = player.x + player.width / 2;
+    const playerCenterY = player.y + player.height / 2;
+
+    // Determine distance to the closest hidden object.
+    let minDistance = Infinity;
+    hiddenObjects.forEach(obj => {
+      const objCenterX = obj.x * gridSize + gridSize / 2;
+      const objCenterY = obj.y * gridSize + gridSize / 2;
+      const dxObj = playerCenterX - objCenterX;
+      const dyObj = playerCenterY - objCenterY;
+      const dist = Math.sqrt(dxObj * dxObj + dyObj * dyObj);
+      if (dist < minDistance) minDistance = dist;
+    });
+
+    // Adjust visual beep interval based on proximity.
+    if (minDistance < detectionRadius) {
+      beepInterval = 200 + (minDistance / detectionRadius) * 800;
+      if (timestamp >= nextFlashTime) {
+        detectorFlashActive = true;
+        flashEndTime = timestamp + flashDuration;
+        nextFlashTime = timestamp + beepInterval;
+      }
+      if (detectorFlashActive && timestamp > flashEndTime) {
+        detectorFlashActive = false;
+      }
+    } else {
+      detectorFlashActive = false;
+      nextFlashTime = timestamp + 1000;
+    }
+  }
+
+  function draw() {
+    // Clear canvas.
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw sand.
+    ctx.fillStyle = sandColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // -------------------------
+    // Draw water area with randomized vertical arcs.
+    // -------------------------
+    const baseWaterY = (rows - waterRows) * gridSize;
+    ctx.beginPath();
+    ctx.moveTo(0, baseWaterY);
+    if (controlPoints.length > 0) {
+      let firstX = controlPoints[0].x;
+      let firstY = baseWaterY - controlPoints[0].current;
+      ctx.lineTo(firstX, firstY);
+      for (let i = 0; i < controlPoints.length - 1; i++) {
+        let cp1 = controlPoints[i];
+        let cp2 = controlPoints[i + 1];
+        let x1 = cp1.x, y1 = baseWaterY - cp1.current;
+        let x2 = cp2.x, y2 = baseWaterY - cp2.current;
+        let midX = (x1 + x2) / 2;
+        let midY = (y1 + y2) / 2;
+        ctx.quadraticCurveTo(x1, y1, midX, midY);
+      }
+      let lastCP = controlPoints[controlPoints.length - 1];
+      ctx.lineTo(lastCP.x, baseWaterY - lastCP.current);
+    }
+    ctx.lineTo(canvas.width, baseWaterY);
+    ctx.lineTo(canvas.width, canvas.height);
+    ctx.lineTo(0, canvas.height);
+    ctx.closePath();
+    ctx.fillStyle = waterColor;
+    ctx.fill();
+
+    // -------------------------
+    // Draw rock obstacles.
+    // -------------------------
+    rocks.forEach(rock => {
+      ctx.fillStyle = rockColor;
+      ctx.fillRect(rock.x * gridSize, rock.y * gridSize, gridSize, gridSize);
+    });
+
+    // -------------------------
+    // Draw the player.
+    // -------------------------
+    ctx.fillStyle = playerColor;
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    // -------------------------
+    // (Optional) Uncomment to visualize hidden objects.
+    /*
+    hiddenObjects.forEach(obj => {
+      ctx.fillStyle = obj.type === "treasure" ? treasureColor : trashColor;
+      ctx.fillRect(obj.x * gridSize, obj.y * gridSize, gridSize, gridSize);
+    });
+    */
+
+    // -------------------------
+    // Visual metal detector indicator ("BEEP").
+    // -------------------------
+    if (detectorFlashActive) {
+      ctx.fillStyle = "black";
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("BEEP", player.x + player.width / 2, player.y - 5);
+    }
+  }
+
+  // -------------------------
+  // INITIALIZE & START GAME
+  // -------------------------
+  initGame();
+  requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
