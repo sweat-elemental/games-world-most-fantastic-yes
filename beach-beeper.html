@@ -75,7 +75,6 @@
   npc2Sprite.src = NPC2_SPRITE_SRC;
   
   // Sprite drawing dimensions (in pixels) independent of colliders.
-  // Adjust these to change how large the sprites appear in world space.
   const PLAYER_SPRITE_DRAW_WIDTH = 64;
   const PLAYER_SPRITE_DRAW_HEIGHT = 64;
   const NPC1_SPRITE_DRAW_WIDTH   = 48;
@@ -87,6 +86,20 @@
   const SPRITE_SCALE_PLAYER = 1.0;
   const SPRITE_SCALE_NPC1   = 1.0;
   const SPRITE_SCALE_NPC2   = 1.0;
+  
+  // Set initial NPC positions (in pixels)
+  let npc1 = {
+    x: 100, 
+    y: 100,
+    width: 32,
+    height: 32
+  };
+  let npc2 = {
+    x: 600,
+    y: 300,
+    width: 32,
+    height: 32
+  };
   
   // ====================================================
   // GLOBAL VARIABLES & SETTINGS
@@ -110,7 +123,7 @@
   const waterRows = 2;
   
   // Player collider (continuous pixel coordinates) – 1 cell wide, 2 cells high.
-  // NOTE: The collider size remains independent from the sprite's drawn dimensions.
+  // NOTE: The collider size remains independent of the sprite's drawn dimensions.
   let player = {
     x: canvas.width / 2 - gridSize / 2,
     y: ((rows - waterRows) * gridSize) / 2 - gridSize,
