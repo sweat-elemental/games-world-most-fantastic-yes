@@ -78,7 +78,6 @@
     // ====================================================
     // NPC DATA & SPAWN
     // ====================================================
-    // This data defines the NPCs’ collision box and graphical dimensions.
     const npcData = [
       {
         x: 100, 
@@ -99,7 +98,6 @@
         sprite: npc2Sprite
       }
     ];
-    // The active NPCs will be stored here.
     let npcs = [];
     
     // ====================================================
@@ -124,7 +122,6 @@
     const waterRows = 2;
 
     // Player (collision dimensions remain fixed).
-    // The drawn sprite can be scaled independently.
     let player = {
       x: canvas.width / 2 - gridSize / 2,
       y: ((rows - waterRows) * gridSize) / 2 - gridSize,
@@ -292,13 +289,31 @@
     // INITIALIZE GAME (map)
     // ====================================================
     function initGame() {
-      // Place rocks randomly.
+      // Determine the fixed spawn location for the player.
+      const spawnX = canvas.width / 2 - gridSize / 2;
+      const spawnY = ((rows - waterRows) * gridSize) / 2 - gridSize;
+      // Define the player's collision safe zone.
+      // The collision rectangle is taken from the bottom half of the player.
+      const safeCol = Math.floor(spawnX / gridSize);
+      const safeRow = Math.floor((spawnY + player.height / 2) / gridSize);
+      
+      // Place rocks randomly, ensuring none spawn in or adjacent to the safe zone.
       rocks = [];
       for (let i = 0; i < 10; i++) {
-        let rockX = Math.floor(Math.random() * cols);
-        let rockY = Math.floor(Math.random() * (rows - waterRows));
+        let rockX, rockY;
+        let valid = false;
+        while (!valid) {
+          rockX = Math.floor(Math.random() * cols);
+          rockY = Math.floor(Math.random() * (rows - waterRows));
+          if (Math.abs(rockX - safeCol) <= 1 && Math.abs(rockY - safeRow) <= 1) {
+            valid = false; // Rock too close to the player's spawn safe zone, re-roll.
+          } else {
+            valid = true;
+          }
+        }
         rocks.push({ x: rockX, y: rockY });
       }
+      
       // Place hidden objects.
       hiddenObjects = [];
       let extraCount = Math.floor(Math.random() * 3) + 1;
@@ -337,17 +352,14 @@
           current: 0
         });
       }
-      // Reset player location.
-      player.x = canvas.width / 2 - gridSize / 2;
-      player.y = ((rows - waterRows) * gridSize) / 2 - gridSize;
+      // Reset player location to the fixed spawn.
+      player.x = spawnX;
+      player.y = spawnY;
       
-      // -------------------------------------------------
-      // SPAWN NPCs WITH A CHANCE (50% chance each)
-      // -------------------------------------------------
+      // Spawn NPCs with a 50% chance each.
       npcs = [];
       npcData.forEach(npc => {
         if (Math.random() < 0.5) {
-          // Optionally, you can randomize positions here.
           npcs.push(Object.assign({}, npc));
         }
       });
