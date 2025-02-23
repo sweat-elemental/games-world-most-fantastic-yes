@@ -59,7 +59,7 @@
 </div>
 <script>
   // ====================================================
-  // SPRITE REFERENCES & NPC LOCATIONS (Easily configurable)
+  // SPRITE REFERENCES, NPC LOCATIONS, & SCALING OPTIONS
   // ====================================================
   const PLAYER_SPRITE_SRC = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/detectorist.png";
   const NPC1_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/beachgoer.png";
@@ -87,6 +87,11 @@
     width: 32,
     height: 32
   };
+  
+  // Sprite scale factors (world space scaling)
+  const SPRITE_SCALE_PLAYER = 1.0; // Adjust to scale player sprite
+  const SPRITE_SCALE_NPC1   = 1.0; // Adjust to scale NPC1 sprite
+  const SPRITE_SCALE_NPC2   = 1.0; // Adjust to scale NPC2 sprite
 
   // ====================================================
   // GLOBAL VARIABLES & SETTINGS
@@ -144,8 +149,7 @@
   let particles = [];
 
   // Metal detector (visual beep indicator).
-  // Expanded detection radius: gridSize * 4.
-  let detectionRadius = gridSize * 4;
+  let detectionRadius = gridSize * 4; // expanded detection radius
   let beepInterval = 1000; // ms, adjusted by proximity.
   let nextFlashTime = 0;
   let flashEndTime = 0;
@@ -182,7 +186,7 @@
   let foundMapTreasures = 0;       // treasures found in current map
 
   // ====================================================
-  // COLLISION UTILITY (only bottom half of player collides)
+  // COLLISION UTILITY (using only bottom half of player)
   // ====================================================
   function getPlayerCollisionRect() {
     return {
@@ -202,7 +206,7 @@
   // ====================================================
   // SIMPLE DIGGING MECHANIC (by clicking a tile)
   // ====================================================
-  // Convert mouse coordinates to a grid tile; if that tile is within a fixed radius (in grid cells)
+  // Convert mouse coordinates to a grid tile; if that tile is within a fixed radius
   // from the player's feet (bottom center), then dig it.
   const digRadius = 3; // expanded from 2 to 3 grid cells
   canvas.addEventListener("mousedown", (e) => {
@@ -327,7 +331,6 @@
     // Reset player location.
     player.x = canvas.width / 2 - gridSize / 2;
     player.y = ((rows - waterRows) * gridSize) / 2 - gridSize;
-    // Optionally, reset NPC positions or leave them as is.
   }
 
   // ====================================================
@@ -353,7 +356,7 @@
     player.x += dx;
     if (player.x < 0) player.x = 0;
     if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
-    // Collision only using bottom half of the player.
+    // Collision using bottom half of player.
     let collisionRect = {
       x: player.x,
       y: player.y + player.height / 2,
@@ -421,7 +424,7 @@
       nextAreaPopup.style.display = "flex";
     }
     
-    // Update counter.
+    // Update counter display.
     document.getElementById("counter").innerText = "Treasures found: " + cumulativeTreasures;
   }
   function draw() {
@@ -438,7 +441,7 @@
       ctx.fillRect(col * gridSize, row * gridSize, gridSize, gridSize);
     }
     
-    // Draw water area (randomized vertical arcs).
+    // Draw water area with randomized vertical arcs.
     const baseWaterY = (rows - waterRows) * gridSize;
     ctx.beginPath();
     ctx.moveTo(0, baseWaterY);
@@ -469,12 +472,12 @@
       ctx.fillRect(rock.x * gridSize, rock.y * gridSize, gridSize, gridSize);
     });
     
-    // Draw NPCs (using sprites).
-    ctx.drawImage(npc1Sprite, npc1.x, npc1.y, npc1.width, npc1.height);
-    ctx.drawImage(npc2Sprite, npc2.x, npc2.y, npc2.width, npc2.height);
+    // Draw NPCs using their sprites with custom scaling.
+    ctx.drawImage(npc1Sprite, npc1.x, npc1.y, npc1.width * SPRITE_SCALE_NPC1, npc1.height * SPRITE_SCALE_NPC1);
+    ctx.drawImage(npc2Sprite, npc2.x, npc2.y, npc2.width * SPRITE_SCALE_NPC2, npc2.height * SPRITE_SCALE_NPC2);
     
-    // Draw the player (using sprite).
-    ctx.drawImage(playerSprite, player.x, player.y, player.width, player.height);
+    // Draw the player using its sprite with custom scaling.
+    ctx.drawImage(playerSprite, player.x, player.y, player.width * SPRITE_SCALE_PLAYER, player.height * SPRITE_SCALE_PLAYER);
     
     // Draw sand particles.
     particles.forEach(p => {
@@ -496,7 +499,7 @@
       ctx.fillStyle = "black";
       ctx.font = "bold 16px Arial";
       ctx.textAlign = "center";
-      ctx.fillText("BEEP", player.x + player.width / 2, player.y - 5);
+      ctx.fillText("BEEP", player.x + (player.width * SPRITE_SCALE_PLAYER) / 2, player.y - 5);
     }
   }
   
