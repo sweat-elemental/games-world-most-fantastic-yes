@@ -15,8 +15,8 @@
       border: 2px solid #000;
       image-rendering: pixelated; /* Ensures pixel perfect rendering */
     }
-    /* Pause menu and next area popup styling */
-    #menu, #nextAreaPopup {
+    /* Overlay styling for pause, next area, and game over screens */
+    #menu, #nextAreaPopup, #gameOverScreen {
       position: fixed;
       top: 0;
       left: 0;
@@ -29,7 +29,7 @@
       flex-direction: column;
       z-index: 100;
     }
-    #menu button, #nextAreaPopup button {
+    #menu button, #nextAreaPopup button, #gameOverScreen button {
       margin: 10px;
       padding: 10px 20px;
       font-size: 16px;
@@ -43,10 +43,20 @@
       font: bold 18px Arial;
       z-index: 50;
     }
+    /* Shovel counter displayed below treasure counter */
+    #shovelCounter {
+      position: absolute;
+      top: 30px;
+      left: 5px;
+      color: black;
+      font: bold 18px Arial;
+      z-index: 50;
+    }
   </style>
 </head>
 <body>
   <div id="counter">Treasures found: 0</div>
+  <div id="shovelCounter"></div>
   <canvas id="gameCanvas" width="800" height="600"></canvas>
   <!-- Pause menu overlay -->
   <div id="menu">
@@ -58,6 +68,12 @@
     <div style="color:white; font-size: 24px; margin-bottom: 20px;">You found all the treasure!</div>
     <button id="nextAreaBtn">Next Area -></button>
   </div>
+  <!-- Game over overlay -->
+  <div id="gameOverScreen">
+    <div style="color:white; font-size: 24px; margin-bottom: 20px;">Game Over! Out of shovels!</div>
+    <button id="restartBtn">Restart</button>
+    <button id="exitBtn2">Exit</button>
+  </div>
   <script>
     // ====================================================
     // SPRITE REFERENCES
@@ -65,6 +81,7 @@
     const PLAYER_SPRITE_SRC = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/detectorist.png";
     const NPC1_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/beachgoer.png";
     const NPC2_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/salesman.png";
+    const SHOVEL_SPRITE_SRC = "assets/gfx/sprites/shovel.png";
     
     let playerSprite = new Image();
     playerSprite.src = PLAYER_SPRITE_SRC;
@@ -131,6 +148,10 @@
       spriteHeight: 72    // custom drawn height
     };
 
+    // Shovel durability mechanic.
+    let shovelDurability = 40;  // reset each level
+    let gameOver = false;
+
     // Key state for continuous movement.
     const keys = {};
     let debugRevealHidden = false;
@@ -175,19 +196,29 @@
     // Timing.
     let lastTimestamp = 0;
 
-    // Pause and next area popup.
+    // Pause, next area, and game over overlays.
     let paused = false;
     const menuDiv = document.getElementById("menu");
     const resumeBtn = document.getElementById("resumeBtn");
     const exitBtn = document.getElementById("exitBtn");
     const nextAreaPopup = document.getElementById("nextAreaPopup");
     const nextAreaBtn = document.getElementById("nextAreaBtn");
+    const gameOverScreen = document.getElementById("gameOverScreen");
+    const restartBtn = document.getElementById("restartBtn");
+    const exitBtn2 = document.getElementById("exitBtn2");
+
     resumeBtn.addEventListener("click", () => {
       paused = false;
       menuDiv.style.display = "none";
     });
     exitBtn.addEventListener("click", () => { window.location.href = "index.html"; });
     nextAreaBtn.addEventListener("click", nextArea);
+    restartBtn.addEventListener("click", () => {
+      gameOverScreen.style.display = "none";
+      initGame();
+      paused = false;
+    });
+    exitBtn2.addEventListener("click", () => { window.location.href = "index.html"; });
 
     // Treasure counters.
     let cumulativeTreasures = 0;    // overall count
@@ -217,6 +248,9 @@
     // ====================================================
     const digRadius = 3; // expanded from 2 to 3 grid cells
     canvas.addEventListener("mousedown", (e) => {
+      // Do not allow digging if the game is paused or over.
+      if (paused || gameOver) return;
+
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
@@ -224,7 +258,11 @@
       const tileRow = Math.floor(mouseY / gridSize);
       if (tileRow >= rows - waterRows) return; // clicked in water
 
-      // Player's feet grid coordinate.
+      // Check if the tile has already been dug.
+      const key = tileCol + "," + tileRow;
+      if (dugTiles[key]) return; // already dug
+      
+      // Check distance from player's feet.
       const playerFeetX = Math.floor((player.x + player.width / 2) / gridSize);
       const playerFeetY = Math.floor((player.y + player.height) / gridSize);
       const dx = tileCol - playerFeetX;
@@ -232,10 +270,44 @@
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist > digRadius) return; // too far to dig
 
-      const key = tileCol + "," + tileRow;
-      if (dugTiles[key]) return; // already dug
-
-      // Check for a hidden object.
+      // Deduct one shovel durability for digging.
+      shovelDurability--;
+      updateShovelDisplay();
+      // If shovels run out, show game over screen.
+      if (shovelDurability <= 0) {
+        // You can optionally process the current dig before game over.
+        // For now, we still mark the tile as dug.
+        // Check for a hidden object.
+        let foundItem = null;
+        for (let i = 0; i < hiddenObjects.length; i++) {
+          const item = hiddenObjects[i];
+          if (item.x === tileCol && item.y === tileRow) {
+            foundItem = item;
+            hiddenObjects.splice(i, 1); // remove so it stops beeping
+            break;
+          }
+        }
+        if (foundItem) {
+          dugTiles[key] = { color: (foundItem.type === "treasure" ? treasureColor : trashColor) };
+          if (foundItem.type === "treasure") {
+            foundMapTreasures++;
+            cumulativeTreasures++;
+          }
+        } else {
+          dugTiles[key] = { color: defaultDugColor };
+        }
+        // Spawn sand particles.
+        const tileCenterX = tileCol * gridSize + gridSize / 2;
+        const tileCenterY = tileRow * gridSize + gridSize / 2;
+        spawnSandParticles(tileCenterX, tileCenterY);
+        // End the game.
+        gameOver = true;
+        paused = true;
+        gameOverScreen.style.display = "flex";
+        return;
+      }
+      
+      // Process normal digging.
       let foundItem = null;
       for (let i = 0; i < hiddenObjects.length; i++) {
         const item = hiddenObjects[i];
@@ -259,6 +331,15 @@
       const tileCenterY = tileRow * gridSize + gridSize / 2;
       spawnSandParticles(tileCenterX, tileCenterY);
     });
+
+    // ====================================================
+    // Update shovel display.
+    // ====================================================
+    function updateShovelDisplay() {
+      const shovelDiv = document.getElementById("shovelCounter");
+      shovelDiv.innerHTML = '<img src="' + SHOVEL_SPRITE_SRC + 
+        '" style="vertical-align: middle; height: 18px; margin-right: 5px;" />' + shovelDurability;
+    }
 
     // ====================================================
     // PARTICLE SYSTEM
@@ -289,11 +370,16 @@
     // INITIALIZE GAME (map)
     // ====================================================
     function initGame() {
+      // Reset shovel durability and hide game over screen.
+      shovelDurability = 40;
+      gameOver = false;
+      updateShovelDisplay();
+      gameOverScreen.style.display = "none";
+      
       // Determine the fixed spawn location for the player.
       const spawnX = canvas.width / 2 - gridSize / 2;
       const spawnY = ((rows - waterRows) * gridSize) / 2 - gridSize;
       // Define the player's collision safe zone.
-      // The collision rectangle is taken from the bottom half of the player.
       const safeCol = Math.floor(spawnX / gridSize);
       const safeRow = Math.floor((spawnY + player.height / 2) / gridSize);
       
