@@ -108,8 +108,8 @@
         y: 100,
         width: 32,
         height: 32,
-        spriteWidth: 72,    // custom drawn width
-        spriteHeight: 72,   // custom drawn height
+        spriteWidth: 72,    
+        spriteHeight: 72,   
         sprite: npc1Sprite
       },
       {
@@ -129,8 +129,8 @@
     // ====================================================
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = false; // disable smoothing for crisp pixel art
-    const gridSize = 32; // each grid cell is 32x32 pixels
+    ctx.imageSmoothingEnabled = false;
+    const gridSize = 32;
     const cols = Math.floor(canvas.width / gridSize);
     const rows = Math.floor(canvas.height / gridSize);
 
@@ -145,7 +145,7 @@
     // Water area: bottom rows are water.
     const waterRows = 2;
 
-    // Player (collision dimensions remain fixed).
+    // Player settings.
     let player = {
       x: canvas.width / 2 - gridSize / 2,
       y: ((rows - waterRows) * gridSize) / 2 - gridSize,
@@ -155,21 +155,25 @@
       spriteHeight: 72
     };
 
-    // Shovel durability mechanic.
-    // startingDurability persists between levels; initial value is 40.
+    // Shovel durability and game status.
     let startingDurability = 40;
     let shovelDurability = startingDurability;
     let gameOver = false;
 
-    // Global treasure high score (persisted between game overs).
+    // High score and treasure count.
     let treasureHighScore = 0;
-
-    // Treasure count for the current run.
     let cumulativeTreasures = 0;
     let currentMapTreasureCount = 0;
     let foundMapTreasures = 0;
 
-    // Key state for continuous movement.
+    // Configuration for the beep text.
+    const beepTextConfig = {
+      fontSize: 8,        // in pixels
+      offsetRange: 2,     // maximum offset (pixels) for both x and y directions
+      rotationRange: 2    // maximum rotation in degrees
+    };
+
+    // Key state and input.
     const keys = {};
     let debugRevealHidden = false;
     document.addEventListener("keydown", (e) => {
@@ -185,17 +189,17 @@
       keys[e.key] = true;
     });
     document.addEventListener("keyup", (e) => { keys[e.key] = false; });
-    const playerSpeed = 200; // pixels per second
+    const playerSpeed = 200;
 
     // Arrays for obstacles and hidden objects.
     let rocks = [];
     let hiddenObjects = [];
     let dugTiles = {};
 
-    // Particle system for sand particles.
+    // Particle system.
     let particles = [];
 
-    // Metal detector (visual beep indicator).
+    // Metal detector beep indicator.
     let detectionRadius = gridSize * 4;
     let beepInterval = 1000;
     let nextFlashTime = 0;
@@ -213,7 +217,7 @@
     // Timing.
     let lastTimestamp = 0;
 
-    // Pause, next area, and game over overlays.
+    // Overlays.
     let paused = false;
     const menuDiv = document.getElementById("menu");
     const resumeBtn = document.getElementById("resumeBtn");
@@ -231,7 +235,6 @@
     exitBtn.addEventListener("click", () => { window.location.href = "index.html"; });
     nextAreaBtn.addEventListener("click", nextArea);
     restartBtn.addEventListener("click", () => {
-      // Reset treasures for a new run while keeping the high score.
       cumulativeTreasures = 0;
       startingDurability = 40;
       gameOverScreen.style.display = "none";
@@ -279,11 +282,9 @@
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist > digRadius) return;
       
-      // Deduct shovel durability and update display.
       shovelDurability--;
       updateShovelDisplay();
       
-      // Process digging.
       let foundItem = null;
       for (let i = 0; i < hiddenObjects.length; i++) {
         const item = hiddenObjects[i];
@@ -306,7 +307,6 @@
       const tileCenterY = tileRow * gridSize + gridSize / 2;
       spawnSandParticles(tileCenterX, tileCenterY);
       
-      // If shovels run out, update high score and trigger game over.
       if (shovelDurability <= 0) {
         if (cumulativeTreasures > treasureHighScore) {
           treasureHighScore = cumulativeTreasures;
@@ -356,19 +356,16 @@
     // INITIALIZE GAME (map)
     // ====================================================
     function initGame() {
-      // Reset durability using startingDurability (persisted from previous level).
       shovelDurability = startingDurability;
       updateShovelDisplay();
       gameOver = false;
       gameOverScreen.style.display = "none";
       
-      // Determine fixed spawn location.
       const spawnX = canvas.width / 2 - gridSize / 2;
       const spawnY = ((rows - waterRows) * gridSize) / 2 - gridSize;
       const safeCol = Math.floor(spawnX / gridSize);
       const safeRow = Math.floor((spawnY + player.height / 2) / gridSize);
       
-      // Place rocks randomly outside the safe zone.
       rocks = [];
       for (let i = 0; i < 10; i++) {
         let rockX, rockY, valid = false;
@@ -384,7 +381,6 @@
         rocks.push({ x: rockX, y: rockY });
       }
       
-      // Place hidden objects.
       hiddenObjects = [];
       let extraCount = Math.floor(Math.random() * 3) + 1;
       let totalHidden = 1 + extraCount;
@@ -410,7 +406,6 @@
       foundMapTreasures = 0;
       dugTiles = {};
       particles = [];
-      // Initialize water control points.
       controlPoints = [];
       const cpCount = Math.ceil(canvas.width / cpSpacing) + 1;
       for (let i = 0; i < cpCount; i++) {
@@ -421,11 +416,9 @@
           current: 0
         });
       }
-      // Reset player location.
       player.x = spawnX;
       player.y = spawnY;
       
-      // Spawn NPCs.
       npcs = [];
       npcData.forEach(npc => {
         if (Math.random() < 0.5) {
@@ -594,24 +587,20 @@
         });
       }
       
-      // Draw the beep text with a subtle random offset and rotation around the player's head area.
+      // Draw the beep text with configurable random offset and rotation around the player's head area.
       if (detectorFlashActive) {
         ctx.save();
-        // Calculate a base head position.
         let playerOffsetY = player.spriteHeight - player.height;
-        // The top of the sprite is at player.y - playerOffsetY.
-        // Spawn the beep text roughly at one-third down from the top.
         let headX = player.x + player.width / 2;
         let headY = player.y - playerOffsetY + (player.spriteHeight / 3);
-        // Subtle random offsets and rotation.
-        let offsetX = Math.random() * 4 - 2; // -2 to 2 pixels
-        let offsetY = Math.random() * 4 - 2;
-        let rotation = (Math.random() * 4 - 2) * Math.PI / 180; // -2° to 2°
+        let offsetX = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
+        let offsetY = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
+        let rotation = (Math.random() * (beepTextConfig.rotationRange * 2) - beepTextConfig.rotationRange) * Math.PI / 180;
         ctx.translate(headX, headY);
         ctx.rotate(rotation);
         ctx.translate(offsetX, offsetY);
         ctx.fillStyle = "black";
-        ctx.font = "bold 8px Arial";
+        ctx.font = "bold " + beepTextConfig.fontSize + "px Arial";
         ctx.textAlign = "center";
         ctx.fillText("BEEP", 0, 0);
         ctx.restore();
@@ -623,7 +612,6 @@
     // ====================================================
     function nextArea() {
       nextAreaPopup.style.display = "none";
-      // Round remaining durability up to nearest 5 (max 40) for the next level.
       startingDurability = Math.min(40, Math.ceil(shovelDurability / 5) * 5);
       initGame();
     }
