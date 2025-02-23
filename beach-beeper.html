@@ -594,24 +594,24 @@
         });
       }
       
-      // Draw the beep text with random offset and rotation around the upper half of the player's sprite (the head area).
+      // Draw the beep text with a subtle random offset and rotation around the player's head area.
       if (detectorFlashActive) {
         ctx.save();
-        // Calculate the head position.
+        // Calculate a base head position.
         let playerOffsetY = player.spriteHeight - player.height;
         // The top of the sprite is at player.y - playerOffsetY.
-        // We'll spawn the beep text roughly at one-third down from the top.
+        // Spawn the beep text roughly at one-third down from the top.
         let headX = player.x + player.width / 2;
         let headY = player.y - playerOffsetY + (player.spriteHeight / 3);
-        // Randomize the position around the head area.
-        let offsetX = Math.random() * 10 - 5; // random shift between -5 and 5
-        let offsetY = Math.random() * 10 - 5;
-        let rotation = (Math.random() * 10 - 5) * Math.PI / 180; // -5 to 5 degrees
+        // Subtle random offsets and rotation.
+        let offsetX = Math.random() * 4 - 2; // -2 to 2 pixels
+        let offsetY = Math.random() * 4 - 2;
+        let rotation = (Math.random() * 4 - 2) * Math.PI / 180; // -2° to 2°
         ctx.translate(headX, headY);
         ctx.rotate(rotation);
         ctx.translate(offsetX, offsetY);
         ctx.fillStyle = "black";
-        ctx.font = "bold 16px Arial";
+        ctx.font = "bold 8px Arial";
         ctx.textAlign = "center";
         ctx.fillText("BEEP", 0, 0);
         ctx.restore();
