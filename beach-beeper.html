@@ -13,10 +13,10 @@
       margin: 20px auto;
       background: #F4A460; /* Light sand color */
       border: 2px solid #000;
-      image-rendering: pixelated; /* Ensures pixel perfect rendering */
+      image-rendering: pixelated;
     }
-    /* Overlay styling for pause, next area, and game over screens */
-    #menu, #nextAreaPopup, #gameOverScreen {
+    /* Overlays for pause, next area, game over, and shop */
+    #menu, #nextAreaPopup, #gameOverScreen, #shopPopup {
       position: fixed;
       top: 0;
       left: 0;
@@ -29,12 +29,13 @@
       flex-direction: column;
       z-index: 100;
     }
-    #menu button, #nextAreaPopup button, #gameOverScreen button {
+    #menu button, #nextAreaPopup button, #gameOverScreen button, #shopPopup button {
       margin: 10px;
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
     }
+    /* Treasure and shovel counters */
     #counter {
       position: absolute;
       top: 5px;
@@ -43,7 +44,6 @@
       font: bold 18px Arial;
       z-index: 50;
     }
-    /* Shovel counter displayed below treasure counter */
     #shovelCounter {
       position: absolute;
       top: 30px;
@@ -52,19 +52,39 @@
       font: bold 18px Arial;
       z-index: 50;
     }
-    /* High score text shown on game over screen */
-    #highScoreDisplay {
+    /* High score displayed at top center */
+    #gameHighScore {
+      position: absolute;
+      top: 5px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: black;
+      font: bold 18px Arial;
+      z-index: 50;
+    }
+    /* Shop popup specific styling */
+    #shopPopup {
+      background: rgba(0, 0, 0, 0.9);
+      padding: 20px;
+      z-index: 200;
+    }
+    #shopPopup h2 {
       color: white;
-      font-size: 20px;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
+    }
+    #shopPopup p {
+      color: white;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
   <div id="counter">Treasures found: 0</div>
   <div id="shovelCounter"></div>
+  <div id="gameHighScore">High Score: 0</div>
   <canvas id="gameCanvas" width="800" height="600"></canvas>
-  <!-- Pause menu overlay -->
+  
+  <!-- Pause menu -->
   <div id="menu">
     <button id="resumeBtn">Resume</button>
     <button id="exitBtn">Exit</button>
@@ -74,17 +94,24 @@
     <div style="color:white; font-size: 24px; margin-bottom: 20px;">You found all the treasure!</div>
     <button id="nextAreaBtn">Next Area -></button>
   </div>
-  <!-- Game over overlay -->
+  <!-- Game over screen -->
   <div id="gameOverScreen">
     <div style="color:white; font-size: 24px; margin-bottom: 20px;">Game Over! Out of shovels!</div>
     <div id="highScoreDisplay"></div>
     <button id="restartBtn">Restart</button>
     <button id="exitBtn2">Exit</button>
   </div>
+  <!-- Shop popup -->
+  <div id="shopPopup">
+    <h2>Shop</h2>
+    <p id="shopCurrency">Treasures: 0</p>
+    <button id="upgradeShovelBtn">Upgrade Shovel (+5 durability) - cost: 1 treasure</button>
+    <button id="upgradeSpeedBtn">Premium Sandals (+20% move speed) - cost: 1 treasure</button>
+    <button id="closeShopBtn">Close Shop</button>
+  </div>
+  
   <script>
-    // ====================================================
     // SPRITE REFERENCES
-    // ====================================================
     const PLAYER_SPRITE_SRC = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/detectorist.png";
     const NPC1_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/beachgoer.png";
     const NPC2_SPRITE_SRC   = "https://sweat-elemental.github.io/games-world-most-fantastic-yes/assets/gfx/sprites/salesman.png";
@@ -92,24 +119,20 @@
     
     let playerSprite = new Image();
     playerSprite.src = PLAYER_SPRITE_SRC;
-    
     let npc1Sprite = new Image();
     npc1Sprite.src = NPC1_SPRITE_SRC;
-    
     let npc2Sprite = new Image();
     npc2Sprite.src = NPC2_SPRITE_SRC;
     
-    // ====================================================
-    // NPC DATA & SPAWN
-    // ====================================================
+    // NPC DATA – two NPCs; NPC2 (with npc2Sprite) is our shop NPC.
     const npcData = [
       {
         x: 100, 
         y: 100,
         width: 32,
         height: 32,
-        spriteWidth: 72,    
-        spriteHeight: 72,   
+        spriteWidth: 72,
+        spriteHeight: 72,
         sprite: npc1Sprite
       },
       {
@@ -117,23 +140,21 @@
         y: 300,
         width: 32,
         height: 32,
-        spriteWidth: 72,    
-        spriteHeight: 72,   
+        spriteWidth: 72,
+        spriteHeight: 72,
         sprite: npc2Sprite
       }
     ];
     let npcs = [];
     
-    // ====================================================
     // GLOBAL VARIABLES & SETTINGS
-    // ====================================================
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = false;
     const gridSize = 32;
     const cols = Math.floor(canvas.width / gridSize);
     const rows = Math.floor(canvas.height / gridSize);
-
+    
     // Colors
     const sandColor       = "#F4A460";
     const defaultDugColor = "#CD853F";
@@ -141,10 +162,8 @@
     const waterColor      = "#00BFFF";
     const treasureColor   = "gold";
     const trashColor      = "brown";
-
-    // Water area.
     const waterRows = 2;
-
+    
     // Player settings.
     let player = {
       x: canvas.width / 2 - gridSize / 2,
@@ -154,32 +173,45 @@
       spriteWidth: 72,
       spriteHeight: 72
     };
-
-    // Shovel durability and game status.
-    let startingDurability = 40;
+    
+    // Persistent upgrade variables.
+    let shovelUpgradeBonus = 0;     // additional base durability from upgrades
+    let speedUpgradeMultiplier = 1; // multiplier for move speed
+    const basePlayerSpeed = 200;
+    
+    // Shovel durability & game status.
+    let startingDurability = 40 + shovelUpgradeBonus;
     let shovelDurability = startingDurability;
     let gameOver = false;
-
-    // High score and treasure count.
+    
+    // High score for best run (without restarting)
     let treasureHighScore = 0;
+    
+    // Current run treasure count.
     let cumulativeTreasures = 0;
     let currentMapTreasureCount = 0;
     let foundMapTreasures = 0;
-
-    // Configuration for the beep text.
+    
+    // Configuration for beep text spawn (calculated once per flash).
     const beepTextConfig = {
-      fontSize: 12,        // in pixels
-      offsetRange: 12,     // maximum offset (pixels)
-      rotationRange: 30    // maximum rotation in degrees
+      fontSize: 8,        // in pixels
+      offsetRange: 2,     // maximum offset in pixels
+      rotationRange: 2    // maximum rotation in degrees
     };
-
-    // Variables to store the beep text's spawn offsets.
+    // Variables to hold the spawned beep text offset and rotation.
     let beepTextOffsetX = 0;
     let beepTextOffsetY = 0;
     let beepTextRotation = 0;
     let beepTextSpawned = false;
-
-    // Key state and input.
+    
+    // Shop-related variables.
+    // The shop currency is the treasures available in the current run.
+    // Upgrades cost 1 treasure each.
+    // Upgrades persist between restarts.
+    // When the player buys a shovel upgrade, they add +5 to base durability.
+    // Premium Sandals increase move speed by +20% (cumulatively).
+    
+    // KEY STATE & INPUT
     const keys = {};
     let debugRevealHidden = false;
     document.addEventListener("keydown", (e) => {
@@ -188,6 +220,7 @@
         menuDiv.style.display = "flex";
         return;
       }
+      // "e" key for shop interaction will be handled in update.
       if (e.key === "y" || e.key === "Y") {
         debugRevealHidden = !debugRevealHidden;
         return;
@@ -195,16 +228,16 @@
       keys[e.key] = true;
     });
     document.addEventListener("keyup", (e) => { keys[e.key] = false; });
-    const playerSpeed = 200;
-
-    // Arrays for obstacles and hidden objects.
+    
+    // Movement speed will be computed as basePlayerSpeed * speedUpgradeMultiplier.
+    // ARRAYS for obstacles, hidden objects.
     let rocks = [];
     let hiddenObjects = [];
     let dugTiles = {};
-
+    
     // Particle system.
     let particles = [];
-
+    
     // Metal detector beep indicator.
     let detectionRadius = gridSize * 4;
     let beepInterval = 1000;
@@ -213,16 +246,16 @@
     const flashDuration = 100;
     let detectorFlashActive = false;
     let prevBeepInterval = 1000;
-
+    
     // Water animation.
     const cpSpacing = 50;
     const waveAnimationSpeed = 0.001;
     const maxWaveHeight = 30;
     let controlPoints = [];
-
+    
     // Timing.
     let lastTimestamp = 0;
-
+    
     // Overlays.
     let paused = false;
     const menuDiv = document.getElementById("menu");
@@ -233,7 +266,12 @@
     const gameOverScreen = document.getElementById("gameOverScreen");
     const restartBtn = document.getElementById("restartBtn");
     const exitBtn2 = document.getElementById("exitBtn2");
-
+    const shopPopup = document.getElementById("shopPopup");
+    const upgradeShovelBtn = document.getElementById("upgradeShovelBtn");
+    const upgradeSpeedBtn = document.getElementById("upgradeSpeedBtn");
+    const closeShopBtn = document.getElementById("closeShopBtn");
+    const shopCurrencyText = document.getElementById("shopCurrency");
+    
     resumeBtn.addEventListener("click", () => {
       paused = false;
       menuDiv.style.display = "none";
@@ -242,16 +280,41 @@
     nextAreaBtn.addEventListener("click", nextArea);
     restartBtn.addEventListener("click", () => {
       cumulativeTreasures = 0;
-      startingDurability = 40;
+      // Do not reset upgrades.
+      startingDurability = 40 + shovelUpgradeBonus;
       gameOverScreen.style.display = "none";
       initGame();
       paused = false;
     });
     exitBtn2.addEventListener("click", () => { window.location.href = "index.html"; });
-
-    // ====================================================
+    
+    closeShopBtn.addEventListener("click", () => {
+      shopPopup.style.display = "none";
+    });
+    
+    upgradeShovelBtn.addEventListener("click", () => {
+      if (cumulativeTreasures > 0) {
+        cumulativeTreasures--;
+        shovelUpgradeBonus += 5;
+        startingDurability = 40 + shovelUpgradeBonus;
+        updateShovelDisplay();
+        updateShopCurrency();
+      }
+    });
+    
+    upgradeSpeedBtn.addEventListener("click", () => {
+      if (cumulativeTreasures > 0) {
+        cumulativeTreasures--;
+        speedUpgradeMultiplier += 0.2;
+        updateShopCurrency();
+      }
+    });
+    
+    function updateShopCurrency() {
+      shopCurrencyText.innerText = "Treasures: " + cumulativeTreasures;
+    }
+    
     // COLLISION UTILITY
-    // ====================================================
     function getPlayerCollisionRect() {
       return {
         x: player.x,
@@ -266,10 +329,8 @@
              rect1.y < rect2.y + rect2.height &&
              rect1.y + rect1.height > rect2.y;
     }
-
-    // ====================================================
-    // DIGGING MECHANIC (by clicking a tile)
-    // ====================================================
+    
+    // DIGGING MECHANIC (click on a tile)
     const digRadius = 3;
     canvas.addEventListener("mousedown", (e) => {
       if (paused || gameOver) return;
@@ -323,19 +384,15 @@
         gameOverScreen.style.display = "flex";
       }
     });
-
-    // ====================================================
+    
     // Update shovel display.
-    // ====================================================
     function updateShovelDisplay() {
       const shovelDiv = document.getElementById("shovelCounter");
       shovelDiv.innerHTML = '<img src="' + SHOVEL_SPRITE_SRC + 
         '" style="vertical-align: middle; height: 18px; margin-right: 5px; image-rendering: pixelated;" />' + shovelDurability;
     }
-
-    // ====================================================
+    
     // PARTICLE SYSTEM
-    // ====================================================
     function spawnSandParticles(x, y) {
       const numParticles = 10;
       for (let i = 0; i < numParticles; i++) {
@@ -357,11 +414,11 @@
         if (p.lifetime <= 0) particles.splice(i, 1);
       }
     }
-
-    // ====================================================
+    
     // INITIALIZE GAME (map)
-    // ====================================================
     function initGame() {
+      // Apply upgrades to starting durability and move speed.
+      startingDurability = 40 + shovelUpgradeBonus;
       shovelDurability = startingDurability;
       updateShovelDisplay();
       gameOver = false;
@@ -427,15 +484,14 @@
       
       npcs = [];
       npcData.forEach(npc => {
+        // Spawn each NPC with a 50% chance.
         if (Math.random() < 0.5) {
           npcs.push(Object.assign({}, npc));
         }
       });
     }
-
-    // ====================================================
+    
     // GAME LOOP FUNCTIONS
-    // ====================================================
     function gameLoop(timestamp) {
       if (!lastTimestamp) lastTimestamp = timestamp;
       const delta = (timestamp - lastTimestamp) / 1000;
@@ -447,10 +503,11 @@
     function update(delta, timestamp) {
       let oldX = player.x, oldY = player.y;
       let dx = 0, dy = 0;
-      if (keys["ArrowUp"] || keys["w"]) dy = -playerSpeed * delta;
-      if (keys["ArrowDown"] || keys["s"]) dy = playerSpeed * delta;
-      if (keys["ArrowLeft"] || keys["a"]) dx = -playerSpeed * delta;
-      if (keys["ArrowRight"] || keys["d"]) dx = playerSpeed * delta;
+      let moveSpeed = basePlayerSpeed * speedUpgradeMultiplier;
+      if (keys["ArrowUp"] || keys["w"]) dy = -moveSpeed * delta;
+      if (keys["ArrowDown"] || keys["s"]) dy = moveSpeed * delta;
+      if (keys["ArrowLeft"] || keys["a"]) dx = -moveSpeed * delta;
+      if (keys["ArrowRight"] || keys["d"]) dx = moveSpeed * delta;
       
       player.x += dx;
       if (player.x < 0) player.x = 0;
@@ -494,6 +551,7 @@
       });
       updateParticles(delta);
       
+      // Update metal detector beep timing.
       const playerCenterX = player.x + player.width / 2;
       const playerCenterY = player.y + player.height / 2;
       let minDistance = Infinity;
@@ -516,7 +574,7 @@
           detectorFlashActive = true;
           flashEndTime = timestamp + flashDuration;
           nextFlashTime = timestamp + beepInterval;
-          // Spawn beep text once.
+          // When the beep flash is triggered, spawn the beep text once.
           if (!beepTextSpawned) {
             beepTextOffsetX = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
             beepTextOffsetY = Math.random() * (beepTextConfig.offsetRange * 2) - beepTextConfig.offsetRange;
@@ -533,6 +591,32 @@
         nextFlashTime = timestamp + 1000;
       }
       
+      // Check for NPC 2 shop interaction.
+      // Look for an NPC with npc2Sprite.
+      let shopNPC = null;
+      npcs.forEach(npc => {
+        if (npc.sprite === npc2Sprite) {
+          // Check if player is within 3 blocks.
+          let npcCenterX = npc.x + npc.width / 2;
+          let npcCenterY = npc.y + npc.height / 2;
+          let dx = playerCenterX - npcCenterX;
+          let dy = playerCenterY - npcCenterY;
+          let dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < gridSize * 3) {
+            shopNPC = npc;
+          }
+        }
+      });
+      // If shop NPC is in range and "e" is pressed, open the shop popup.
+      if (shopNPC && keys["e"]) {
+        shopPopup.style.display = "flex";
+        updateShopCurrency();
+      }
+      
+      // Update the on-screen high score (top middle).
+      document.getElementById("gameHighScore").innerText = "High Score: " + treasureHighScore;
+      
+      // If current map is cleared, show next area popup.
       if (foundMapTreasures >= currentMapTreasureCount && currentMapTreasureCount > 0) {
         nextAreaPopup.style.display = "flex";
       }
@@ -541,7 +625,6 @@
     }
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
       ctx.fillStyle = sandColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
@@ -603,7 +686,26 @@
         });
       }
       
-      // Draw the beep text using the fixed spawn values.
+      // If shop NPC is nearby, display prompt above his head.
+      npcs.forEach(npc => {
+        if (npc.sprite === npc2Sprite) {
+          let npcCenterX = npc.x + npc.width / 2;
+          let npcCenterY = npc.y; // place prompt above
+          let dx = (player.x + player.width / 2) - npcCenterX;
+          let dy = (player.y + player.height / 2) - npcCenterY;
+          let dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < gridSize * 3) {
+            ctx.save();
+            ctx.fillStyle = "black";
+            ctx.font = "bold 10px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("Press E to shop", npcCenterX, npc.y - 10);
+            ctx.restore();
+          }
+        }
+      });
+      
+      // Draw the beep text using fixed spawn values.
       if (detectorFlashActive) {
         ctx.save();
         let playerOffsetY = player.spriteHeight - player.height;
@@ -620,12 +722,10 @@
       }
     }
     
-    // ====================================================
-    // NEXT LEVEL: adjust starting durability and reinitialize game.
-    // ====================================================
+    // NEXT LEVEL: when the level is complete.
     function nextArea() {
       nextAreaPopup.style.display = "none";
-      startingDurability = Math.min(40, Math.ceil(shovelDurability / 5) * 5);
+      startingDurability = Math.min(40, Math.ceil(shovelDurability / 5) * 5) + shovelUpgradeBonus;
       initGame();
     }
     
