@@ -35,29 +35,30 @@
       font-size: 16px;
       cursor: pointer;
     }
-    /* Treasure and shovel counters */
-    #counter {
-      position: absolute;
-      top: 5px;
-      left: 5px;
-      color: black;
-      font: bold 18px Arial;
-      z-index: 50;
-    }
-    #shovelCounter {
-      position: absolute;
-      top: 30px;
-      left: 5px;
-      color: black;
-      font: bold 18px Arial;
-      z-index: 50;
-    }
     /* High score displayed at top center */
     #gameHighScore {
       position: absolute;
       top: 5px;
       left: 50%;
       transform: translateX(-50%);
+      color: black;
+      font: bold 18px Arial;
+      z-index: 50;
+    }
+    /* Treasure counter below high score */
+    #counter {
+      position: absolute;
+      top: 40px;
+      left: 5px;
+      color: black;
+      font: bold 18px Arial;
+      z-index: 50;
+    }
+    /* Shovel counter below treasure counter */
+    #shovelCounter {
+      position: absolute;
+      top: 65px;
+      left: 5px;
       color: black;
       font: bold 18px Arial;
       z-index: 50;
@@ -79,10 +80,11 @@
   </style>
 </head>
 <body>
+  <div id="gameHighScore">High Score: 0</div>
   <div id="counter">Treasures found: 0</div>
   <div id="shovelCounter"></div>
-  <div id="gameHighScore">High Score: 0</div>
   <canvas id="gameCanvas" width="800" height="600"></canvas>
+  
   <!-- Pause menu overlay -->
   <div id="menu">
     <button id="resumeBtn">Resume</button>
@@ -108,6 +110,7 @@
     <button id="upgradeSpeedBtn">Premium Sandals (+20% move speed) - cost: 1 treasure</button>
     <button id="closeShopBtn">Close Shop</button>
   </div>
+  
   <script>
     // ====================================================
     // SPRITE REFERENCES
@@ -181,11 +184,12 @@
     };
     
     // Persistent upgrade variables.
-    let shovelUpgradeBonus = 0;     // additional base durability from upgrades
-    let speedUpgradeMultiplier = 1; // multiplier for move speed (initially 1)
+    let shovelUpgradeBonus = 0;     // Upgrades persist between lives but reset on new area.
+    let speedUpgradeMultiplier = 1; // This upgrade persists between lives.
     const basePlayerSpeed = 200;
     
     // Shovel durability and game status.
+    // When restarting after a death, upgrades persist; when moving to a new area, shovel upgrades reset.
     let startingDurability = 40 + shovelUpgradeBonus;
     let shovelDurability = startingDurability;
     let gameOver = false;
@@ -214,11 +218,10 @@
     // SHOP VARIABLES & OVERLAYS
     // ====================================================
     // The shop currency is the treasures from the current run.
-    // Upgrades cost 1 treasure each.
-    // Upgrades persist between restarts.
+    // Each upgrade costs 1 treasure.
     // Upgrade effects:
-    //  - Upgrade Shovel: adds +5 to base durability.
-    //  - Premium Sandals: increases move speed by +20% (cumulatively).
+    //  - Upgrade Shovel: adds +5 to base durability (applied immediately; resets between areas).
+    //  - Premium Sandals: increases move speed by +20% (cumulatively; persists between lives).
     
     // ====================================================
     // KEY STATE & INPUT
@@ -292,7 +295,7 @@
     nextAreaBtn.addEventListener("click", nextArea);
     restartBtn.addEventListener("click", () => {
       cumulativeTreasures = 0;
-      // Do not reset upgrades.
+      // On restart (after death), upgrades persist.
       startingDurability = 40 + shovelUpgradeBonus;
       gameOverScreen.style.display = "none";
       initGame();
@@ -308,6 +311,8 @@
       if (cumulativeTreasures > 0) {
         cumulativeTreasures--;
         shovelUpgradeBonus += 5;
+        // Apply immediately.
+        shovelDurability += 5;
         startingDurability = 40 + shovelUpgradeBonus;
         updateShovelDisplay();
         updateShopCurrency();
@@ -439,8 +444,11 @@
     // INITIALIZE GAME (map)
     // ====================================================
     function initGame() {
-      startingDurability = 40 + shovelUpgradeBonus;
+      // When starting a new area, round the current shovel durability up to the next multiple of 5.
+      // Then reset the shovel upgrade bonus (shovel upgrades do not carry over between areas).
+      startingDurability = Math.ceil(shovelDurability / 5) * 5;
       shovelDurability = startingDurability;
+      shovelUpgradeBonus = 0;  // reset durability upgrades between areas
       updateShovelDisplay();
       gameOver = false;
       gameOverScreen.style.display = "none";
@@ -525,7 +533,6 @@
     function update(delta, timestamp) {
       let oldX = player.x, oldY = player.y;
       let dx = 0, dy = 0;
-      // Calculate move speed factoring in upgrades.
       let moveSpeed = basePlayerSpeed * speedUpgradeMultiplier;
       if (keys["ArrowUp"] || keys["w"]) dy = -moveSpeed * delta;
       if (keys["ArrowDown"] || keys["s"]) dy = moveSpeed * delta;
@@ -618,7 +625,6 @@
       let shopNPC = null;
       npcs.forEach(npc => {
         if (npc.sprite === npc2Sprite) {
-          // Check if player is within 3 blocks.
           let npcCenterX = npc.x + npc.width / 2;
           let npcCenterY = npc.y + npc.height / 2;
           let dxNPC = playerCenterX - npcCenterX;
@@ -629,13 +635,11 @@
           }
         }
       });
-      // If shop NPC is in range and 'e' is pressed, open the shop popup.
       if (shopNPC && keys["e"]) {
         shopPopup.style.display = "flex";
         updateShopCurrency();
       }
       
-      // Update on-screen high score (top middle).
       document.getElementById("gameHighScore").innerText = "High Score: " + treasureHighScore;
       
       if (foundMapTreasures >= currentMapTreasureCount && currentMapTreasureCount > 0) {
@@ -749,7 +753,11 @@
     // ====================================================
     function nextArea() {
       nextAreaPopup.style.display = "none";
-      startingDurability = Math.min(40, Math.ceil(shovelDurability / 5) * 5) + shovelUpgradeBonus;
+      // When progressing to a new area, round current shovel durability up to the nearest 5,
+      // then reset the shovel upgrade bonus (while speed upgrades persist).
+      startingDurability = Math.ceil(shovelDurability / 5) * 5;
+      shovelDurability = startingDurability;
+      shovelUpgradeBonus = 0;
       initGame();
     }
     
