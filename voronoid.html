@@ -1,0 +1,1445 @@
+// Initial setup for UI elements  
+            document.addEventListener('DOMContentLoaded', () => {
+                // Set initial checkbox states
+                showDotsToggle.checked = showDots;
+                showWeightsToggle.checked = showWeights;
+            });                <li><strong>Display Options:</strong>
+                    <ul>
+                        <li><strong>Show Cell Centers:</strong> Show/hide dots indicating the center of each cell</li>
+                        <li><strong>Show Weight Numbers:</strong> Show/hide weight percentages when using weighted cells</li>
+                    </ul>
+                </li>            // Setup display toggle controls
+            showDotsToggle.addEventListener('click', function() {
+                showDots = this.checked;
+                renderVoronoi();
+            });
+            
+            showWeightsToggle.addEventListener('click', function() {
+                showWeights = this.checked;
+                renderVoronoi();
+            });<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voronoi Diagram Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        #canvas {
+            border: 1px solid #ccc;
+            background-color: white;
+            cursor: pointer;
+            touch-action: manipulation;
+            margin-bottom: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .color-picker {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .color-option {
+            width: 30px;
+            height: 30px;
+            margin: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .color-option.selected {
+            border-color: black;
+        }
+        .tool-buttons {
+            margin-bottom: 15px;
+        }
+        .tool-btn {
+            padding: 8px 16px;
+            margin: 0 5px;
+            background-color: #3f51b5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .tool-btn.active {
+            background-color: #283593;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        .tool-btn:hover {
+            background-color: #303f9f;
+        }
+        .instructions {
+            margin-top: 20px;
+            color: #555;
+            font-size: 14px;
+            text-align: left;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .settings-row {
+            margin: 10px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .setting-group {
+            margin: 0 15px 10px;
+            display: flex;
+            align-items: center;
+        }
+        label {
+            margin-right: 10px;
+        }
+        select, input {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            margin: 0 10px;
+            min-width: 150px;
+        }
+        .slider-container label {
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .weight-controls {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voronoi Diagram Editor</h1>
+        
+        <div class="controls">
+            <button id="reset">Reset</button>
+            <button id="randomize">Randomize</button>
+            <button id="undo">Undo</button>
+        </div>
+        
+        <div class="tool-buttons">
+            <button id="addPointTool" class="tool-btn active">Add Point</button>
+            <button id="paintTool" class="tool-btn">Paint</button>
+        </div>
+        
+        <div class="settings-row">
+            <div class="setting-group">
+                <label for="distanceMetric">Distance Metric:</label>
+                <select id="distanceMetric">
+                    <option value="euclidean">Euclidean</option>
+                    <option value="manhattan">Manhattan</option>
+                    <option value="chebyshev">Chebyshev</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label for="borderMode">Border Mode:</label>
+                <select id="borderMode">
+                    <option value="all">Show All Borders</option>
+                    <option value="color">Only Between Colors</option>
+                    <option value="none">No Borders</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="settings-row">
+            <div class="setting-group">
+                <input type="checkbox" id="showDots" checked onclick="toggleDots()">
+                <label for="showDots">Show Cell Centers</label>
+            </div>
+            <div class="setting-group">
+                <input type="checkbox" id="showWeights" checked onclick="toggleWeights()">
+                <label for="showWeights">Show Weight Numbers</label>
+            </div>
+        </div>
+        
+        <div class="weight-controls">
+            <div class="setting-group">
+                <input type="checkbox" id="weightToggle">
+                <label for="weightToggle">Use Weighted Cells</label>
+            </div>
+            
+            <div class="slider-container">
+                <label for="maxWeightRange">Max Weight Range: <span id="maxWeightValue">0</span>%</label>
+                <input type="range" id="maxWeightRange" min="0" max="100" value="30">
+            </div>
+            
+            <button id="randomizeWeights">Randomize Weights</button>
+            <button id="resetWeights">Reset Weights</button>
+        </div>
+        
+        <div class="color-picker" id="colorPicker">
+            <div class="color-option selected" style="background-color: #ff5252;" data-color="#ff5252"></div>
+            <div class="color-option" style="background-color: #ffb142;" data-color="#ffb142"></div>
+            <div class="color-option" style="background-color: #34ace0;" data-color="#34ace0"></div>
+            <div class="color-option" style="background-color: #33d9b2;" data-color="#33d9b2"></div>
+            <div class="color-option" style="background-color: #706fd3;" data-color="#706fd3"></div>
+            <div class="color-option" style="background-color: #ff793f;" data-color="#ff793f"></div>
+            <div class="color-option" style="background-color: #aaa69d;" data-color="#aaa69d"></div>
+            <div class="color-option" style="background-color: #ff5252;" data-color="#ff5252"></div>
+        </div>
+        
+        <canvas id="canvas" width="700" height="500"></canvas>
+        
+        <div class="instructions">
+            <p><strong>Instructions:</strong></p>
+            <ul>
+                <li><strong>Add Point Tool (D key):</strong> 
+                    <ul>
+                        <li>Click and hold to preview the cell before placing</li>
+                        <li>Release to place the point (must be a minimum distance from other points)</li>
+                        <li>Clicking a cell that's too close will color it with your selected color</li>
+                        <li>Right-click on a cell to move it</li>
+                        <li>Shift+click on a cell to pick its color</li>
+                        <li>Alt+click on a cell to delete it</li>
+                    </ul>
+                </li>
+                <li><strong>Paint Tool (B key):</strong> 
+                    <ul>
+                        <li>Click on cells to color them with the selected color</li>
+                        <li>Click and drag to paint multiple cells</li>
+                    </ul>
+                </li>
+                <li><strong>Distance Metrics:</strong>
+                    <ul>
+                        <li><strong>Euclidean:</strong> Standard straight-line distance (traditional Voronoi)</li>
+                        <li><strong>Manhattan:</strong> Distance along axes at right angles (diamond-shaped cells)</li>
+                        <li><strong>Chebyshev:</strong> Maximum distance along any axis (square-shaped cells)</li>
+                    </ul>
+                </li>
+                <li><strong>Border Modes:</strong>
+                    <ul>
+                        <li><strong>Show All Borders:</strong> Display borders between all cells</li>
+                        <li><strong>Only Between Colors:</strong> Only show borders between cells of different colors</li>
+                        <li><strong>No Borders:</strong> Hide all cell borders</li>
+                    </ul>
+                </li>
+                <li><strong>Weighted Cells:</strong>
+                    <ul>
+                        <li>When enabled, each cell has a weight that affects its size</li>
+                        <li>Positive weights make cells larger, negative weights make cells smaller</li>
+                        <li>Use mouse wheel while hovering over a cell to adjust its weight</li>
+                        <li>The max weight range controls how much variation is allowed</li>
+                        <li>The weight value is shown inside each cell</li>
+                    </ul>
+                </li>
+                <li><strong>Keyboard Shortcuts:</strong>
+                    <ul>
+                        <li><strong>D:</strong> Switch to Add Point tool</li>
+                        <li><strong>B:</strong> Switch to Paint tool</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Basic setup
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const resetBtn = document.getElementById('reset');
+            const randomizeBtn = document.getElementById('randomize');
+            const undoBtn = document.getElementById('undo');
+            const colorOptions = document.querySelectorAll('.color-option');
+            const addPointToolBtn = document.getElementById('addPointTool');
+            const paintToolBtn = document.getElementById('paintTool');
+            const distanceMetricSelect = document.getElementById('distanceMetric');
+            const borderModeSelect = document.getElementById('borderMode');
+            const weightToggle = document.getElementById('weightToggle');
+            const maxWeightRange = document.getElementById('maxWeightRange');
+            const maxWeightValue = document.getElementById('maxWeightValue');
+            const randomizeWeightsBtn = document.getElementById('randomizeWeights');
+            const resetWeightsBtn = document.getElementById('resetWeights');
+            const showDotsToggle = document.getElementById('showDots');
+            const showWeightsToggle = document.getElementById('showWeights');
+            
+            // Constants
+            const MIN_DISTANCE = 15; // Minimum distance between points
+            const STATIC_GRID_RESOLUTION = 2; // High quality for non-interactive states
+            const INTERACTIVE_GRID_RESOLUTION = 4; // Lower quality for better performance during interaction
+            let currentGridResolution = STATIC_GRID_RESOLUTION; // Current active resolution
+            let isInteracting = false; // Track if user is currently interacting
+            
+            // Data structure for points
+            let points = [];
+            let selectedColor = '#ff5252'; // Default color
+            let currentTool = 'addPoint'; // Default tool
+            let currentDistanceMetric = 'euclidean'; // Default distance metric
+            let currentBorderMode = 'all'; // Default border mode
+            let useWeightedCells = false; // Default weighted mode
+            let maxWeightRangeValue = 30; // Default maximum weight range (%)
+            let showDots = true; // Default to showing cell center dots
+            let showWeights = true; // Default to showing weight numbers
+            
+            // Preview variables
+            let isPreviewActive = false;
+            let previewPoint = null;
+            let isValidPlacement = false;
+            
+            // Variables for tracking drag operations
+            let isPainting = false;
+            let isMovingPoint = false;
+            let movingPointIndex = -1;
+            let lastPaintedCellIndex = -1; // To prevent painting the same cell multiple times in one drag
+            
+            // Cache for Voronoi calculations
+            let gridCache = null;
+            let cachedPoints = [];
+            let cachedMetric = '';
+            let cachedWeightMode = false;
+            let cachedResolution = 0;
+            let cachedIncludePreview = false;
+            let cachedMaxWeight = 0;
+            let cachedBorderMode = '';
+            
+            // Separate cache for Euclidean Voronoi
+            let euclideanCache = null;
+            let euclideanCachedPoints = [];
+            
+            // Set initial value for weight range display
+            maxWeightValue.textContent = maxWeightRange.value;
+            
+            // Setup color picker
+            colorOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    // Remove selected class from all options
+                    colorOptions.forEach(opt => opt.classList.remove('selected'));
+                    // Add selected class to clicked option
+                    this.classList.add('selected');
+                    // Update selected color
+                    selectedColor = this.dataset.color;
+                });
+            });
+            
+            // Setup distance metric selector
+            distanceMetricSelect.addEventListener('change', function() {
+                currentDistanceMetric = this.value;
+                renderVoronoi();
+            });
+            
+            // Setup border mode selector
+            borderModeSelect.addEventListener('change', function() {
+                currentBorderMode = this.value;
+                renderVoronoi();
+            });
+            
+            // Setup weight controls
+            weightToggle.addEventListener('change', function() {
+                useWeightedCells = this.checked;
+                if (useWeightedCells && points.length > 0) {
+                    // Ensure all points have weights
+                    ensurePointWeights();
+                }
+                renderVoronoi();
+            });
+            
+            maxWeightRange.addEventListener('input', function() {
+                maxWeightRangeValue = parseInt(this.value);
+                maxWeightValue.textContent = maxWeightRangeValue;
+                if (useWeightedCells) {
+                    renderVoronoi();
+                }
+            });
+            
+            randomizeWeightsBtn.addEventListener('click', function() {
+                if (points.length > 0) {
+                    randomizePointWeights();
+                    renderVoronoi();
+                }
+            });
+            
+            resetWeightsBtn.addEventListener('click', function() {
+                if (points.length > 0) {
+                    points.forEach(point => point.weight = 0);
+                    renderVoronoi();
+                }
+            });
+            
+            // Setup tool buttons
+            addPointToolBtn.addEventListener('click', function() {
+                currentTool = 'addPoint';
+                addPointToolBtn.classList.add('active');
+                paintToolBtn.classList.remove('active');
+                canvas.style.cursor = 'crosshair';
+            });
+            
+            paintToolBtn.addEventListener('click', function() {
+                currentTool = 'paint';
+                paintToolBtn.classList.add('active');
+                addPointToolBtn.classList.remove('active');
+                canvas.style.cursor = 'pointer';
+            });
+            
+            // Ensure all points have weight values
+            function ensurePointWeights() {
+                points.forEach(point => {
+                    if (point.weight === undefined) {
+                        point.weight = 0; // Default weight (no effect)
+                    }
+                });
+            }
+            
+            // Randomize weights for all points
+            function randomizePointWeights() {
+                points.forEach(point => {
+                    // Generate a random weight between -maxWeightRangeValue and +maxWeightRangeValue
+                    point.weight = (Math.random() * 2 - 1) * maxWeightRangeValue;
+                });
+                
+                if (previewPoint) {
+                    previewPoint.weight = 0; // Preview point starts with neutral weight
+                }
+            }
+            
+            // Calculate distance based on current metric and weight
+            function calculateDistance(x1, y1, x2, y2, weight = 0) {
+                let distance;
+                
+                // For comparisons, we can optimize by avoiding square root for Euclidean
+                // Calculate base distance using the selected metric
+                switch (currentDistanceMetric) {
+                    case 'manhattan':
+                        distance = Math.abs(x1 - x2) + Math.abs(y1 - y2);
+                        break;
+                    case 'chebyshev':
+                        distance = Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
+                        break;
+                    case 'euclidean':
+                    default:
+                        const dx = x1 - x2;
+                        const dy = y1 - y2;
+                        // Avoid square root when possible - since we're only comparing distances
+                        // Using squared distance is faster and gives same comparison results
+                        distance = dx * dx + dy * dy;
+                        break;
+                }
+                
+                // Apply weight if using weighted cells
+                if (useWeightedCells && weight !== 0) {
+                    // Precalculate weight factor - optimized by moving division out of loop
+                    const weightFactor = 1 - (weight / 100);
+                    // Applying squared factor for Euclidean squared distance
+                    if (currentDistanceMetric === 'euclidean') {
+                        distance *= (weightFactor * weightFactor);
+                    } else {
+                        distance *= weightFactor;
+                    }
+                }
+                
+                return distance;
+            }
+            
+            // Calculate actual Euclidean distance with square root
+            // Used for minimum distance checks
+            function calculateEuclideanDistance(x1, y1, x2, y2) {
+                const dx = x1 - x2;
+                const dy = y1 - y2;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            // Check if a point is too close to existing points
+            function isTooClose(x, y, excludeIndex = -1) {
+                // Square the minimum distance to avoid square root calculation
+                const minDistSquared = MIN_DISTANCE * MIN_DISTANCE;
+                
+                for (let i = 0; i < points.length; i++) {
+                    if (i === excludeIndex) continue; // Skip the point we're moving
+                    
+                    const point = points[i];
+                    const dx = point.x - x;
+                    const dy = point.y - y;
+                    // Use squared distance for comparison (faster)
+                    const distanceSquared = dx * dx + dy * dy;
+                    if (distanceSquared < minDistSquared) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            // Function to compute Euclidean Voronoi diagram using D3 (for fast rendering)
+            function computeVoronoiEuclidean(includePreview = false) {
+                if (points.length === 0 && !includePreview) return null;
+                
+                // Use actual points directly when not using weights
+                const pointsToUse = [...points];
+                
+                // Add the preview point if it exists and we want to include it
+                if (includePreview && previewPoint) {
+                    pointsToUse.push(previewPoint);
+                }
+                
+                if (pointsToUse.length === 0) return null;
+                
+                // Don't use cache during preview operations since the preview point moves frequently
+                if (includePreview && previewPoint) {
+                    // Skip cache check, always recalculate for preview to capture point movement
+                } else {
+                    // Check if we can use cached result
+                    const cacheIsValid = 
+                        euclideanCache !== null && 
+                        !useWeightedCells && // Only cache non-weighted calculations
+                        cachedIncludePreview === includePreview &&
+                        JSON.stringify(euclideanCachedPoints) === JSON.stringify(pointsToUse);
+                    
+                    if (cacheIsValid) {
+                        return euclideanCache;
+                    }
+                }
+                
+                // Create Voronoi generator using D3
+                const voronoi = d3.Delaunay
+                    .from(pointsToUse, d => d.x, d => d.y)
+                    .voronoi([0, 0, canvas.width, canvas.height]);
+                
+                // Update cache if not in weighted mode and not dealing with preview
+                if (!useWeightedCells && (!includePreview || !previewPoint)) {
+                    euclideanCache = voronoi;
+                    euclideanCachedPoints = [...pointsToUse]; // Deep copy
+                    cachedIncludePreview = includePreview;
+                }
+                
+                return voronoi;
+            }
+            
+            // Generate a grid-based Voronoi diagram for all metrics
+            function computeVoronoiGrid(includePreview = false) {
+                const pointsToUse = [...points];
+                
+                // Add the preview point if it exists and we want to include it
+                if (includePreview && previewPoint) {
+                    pointsToUse.push(previewPoint);
+                }
+                
+                if (pointsToUse.length === 0) return null;
+                
+                // Use appropriate resolution based on interaction state and metric
+                // Higher resolution for Euclidean to better approximate curves
+                let resolution = isInteracting ? INTERACTIVE_GRID_RESOLUTION : STATIC_GRID_RESOLUTION;
+                if (currentDistanceMetric === 'euclidean') {
+                    resolution = Math.max(1, resolution - 1); // Higher resolution (smaller value) for Euclidean
+                }
+                
+                // When there's an active preview, we should always recalculate since preview point might have moved
+                if (includePreview && previewPoint) {
+                    // Skip cache check during preview as the preview point position changes frequently
+                } else {
+                    // Check if we can use cached grid result
+                    const cacheIsValid = 
+                        gridCache !== null && 
+                        cachedMetric === currentDistanceMetric &&
+                        cachedWeightMode === useWeightedCells &&
+                        cachedResolution === resolution &&
+                        cachedIncludePreview === includePreview &&
+                        cachedMaxWeight === maxWeightRangeValue &&
+                        cachedBorderMode === currentBorderMode &&
+                        JSON.stringify(cachedPoints) === JSON.stringify(pointsToUse);
+                    
+                    if (cacheIsValid) {
+                        return gridCache;
+                    }
+                }
+                
+                // Initialize grid with the size of the canvas
+                const gridWidth = Math.ceil(canvas.width / resolution);
+                const gridHeight = Math.ceil(canvas.height / resolution);
+                
+                // Initialize the grid with cell indices
+                const grid = new Array(gridWidth * gridHeight).fill(-1);
+                
+                // For each point in the grid, find the closest Voronoi point
+                for (let y = 0; y < gridHeight; y++) {
+                    for (let x = 0; x < gridWidth; x++) {
+                        const realX = x * resolution + (resolution / 2); // Center of cell
+                        const realY = y * resolution + (resolution / 2); // Center of cell
+                        
+                        let minDist = Infinity;
+                        let closestIndex = -1;
+                        
+                        // Find the closest point using the current distance metric
+                        for (let i = 0; i < pointsToUse.length; i++) {
+                            const point = pointsToUse[i];
+                            const dist = calculateDistance(realX, realY, point.x, point.y, point.weight);
+                            
+                            if (dist < minDist) {
+                                minDist = dist;
+                                closestIndex = i;
+                            }
+                        }
+                        
+                        // Assign this grid cell to the closest point
+                        grid[y * gridWidth + x] = closestIndex;
+                    }
+                }
+                
+                // Create the result object
+                const result = {
+                    grid: grid,
+                    width: gridWidth,
+                    height: gridHeight,
+                    resolution: resolution,
+                    points: pointsToUse
+                };
+                
+                // Only update cache if not dealing with preview point
+                if (!includePreview || !previewPoint) {
+                    // Update cache
+                    gridCache = result;
+                    cachedPoints = [...pointsToUse]; // Deep copy to avoid reference issues
+                    cachedMetric = currentDistanceMetric;
+                    cachedWeightMode = useWeightedCells;
+                    cachedResolution = resolution;
+                    cachedIncludePreview = includePreview;
+                    cachedMaxWeight = maxWeightRangeValue;
+                    cachedBorderMode = currentBorderMode;
+                }
+                
+                return result;
+            }
+            
+            // Find which cell/point is under the cursor
+            function findCellUnderCursor(x, y) {
+                if (points.length === 0) return -1;
+                
+                if (currentDistanceMetric === 'euclidean') {
+                    const voronoi = computeVoronoiEuclidean();
+                    if (!voronoi) return -1;
+                    return voronoi.delaunay.find(x, y);
+                } else {
+                    return findClosestPointIndex(x, y);
+                }
+            }
+            
+            // Function to find the closest point index using the selected distance metric
+            function findClosestPointIndex(x, y, includePreview = false) {
+                const pointsToCheck = [...points];
+                
+                // Add preview point if needed
+                if (includePreview && previewPoint) {
+                    pointsToCheck.push(previewPoint);
+                }
+                
+                if (pointsToCheck.length === 0) return -1;
+                
+                let closestDist = Infinity;
+                let closestIndex = -1;
+                
+                for (let i = 0; i < pointsToCheck.length; i++) {
+                    const point = pointsToCheck[i];
+                    const dist = calculateDistance(x, y, point.x, point.y, point.weight);
+                    
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestIndex = i;
+                    }
+                }
+                
+                return closestIndex;
+            }
+            
+            // Determine if the border should be drawn based on the current border mode
+            function shouldDrawBorder(index1, index2, pointsToRender) {
+                if (currentBorderMode === 'all') {
+                    return true;
+                } else if (currentBorderMode === 'none') {
+                    return false;
+                } else if (currentBorderMode === 'color') {
+                    // Check if both indices are valid points
+                    if (index1 >= 0 && index2 >= 0 && 
+                        index1 < pointsToRender.length && index2 < pointsToRender.length) {
+                        // Only draw borders between different colors
+                        return pointsToRender[index1].color !== pointsToRender[index2].color;
+                    }
+                    
+                    // If one of the indices is invalid (edge of canvas), always draw the border
+                    return true;
+                }
+                return true; // Default to drawing borders
+            }
+            
+            // Create a complete border edge map from the grid
+            function createBorderEdgeMap(grid, width, height, points) {
+                // Map to store all cell edges
+                const edgeMap = new Map();
+                
+                // Helper to get a unique key for an edge
+                const getEdgeKey = (x1, y1, x2, y2) => {
+                    // Normalize the edge coordinates to ensure consistent order
+                    if (x1 > x2 || (x1 === x2 && y1 > y2)) {
+                        return `${x2},${y2}|${x1},${y1}`;
+                    }
+                    return `${x1},${y1}|${x2},${y2}`;
+                };
+                
+                // Check each grid cell and its neighbors
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const index = grid[y * width + x];
+                        if (index === -1) continue; // Skip empty cells
+                        
+                        // Get the color of this cell
+                        const cellColor = points[index]?.color || "unknown";
+                        
+                        // Define the 4 edges of this cell
+                        const edges = [
+                            // Top edge: (x,y) to (x+1,y)
+                            { x1: x, y1: y, x2: x+1, y2: y, dir: 'h' },
+                            // Right edge: (x+1,y) to (x+1,y+1)
+                            { x1: x+1, y1: y, x2: x+1, y2: y+1, dir: 'v' },
+                            // Bottom edge: (x,y+1) to (x+1,y+1)
+                            { x1: x, y1: y+1, x2: x+1, y2: y+1, dir: 'h' },
+                            // Left edge: (x,y) to (x,y+1)
+                            { x1: x, y1: y, x2: x, y2: y+1, dir: 'v' }
+                        ];
+                        
+                        // Process each edge
+                        for (const edge of edges) {
+                            const { x1, y1, x2, y2, dir } = edge;
+                            
+                            // Find the neighbor cell that shares this edge
+                            let neighborX, neighborY;
+                            if (dir === 'h') { // Horizontal edge
+                                neighborX = x;
+                                neighborY = (y1 === y) ? y-1 : y+1; // Top or bottom neighbor
+                            } else { // Vertical edge
+                                neighborX = (x1 === x) ? x-1 : x+1; // Left or right neighbor
+                                neighborY = y;
+                            }
+                            
+                            // Check if neighbor is within grid
+                            let neighborIndex = -1;
+                            let neighborColor = null;
+                            if (neighborX >= 0 && neighborX < width && neighborY >= 0 && neighborY < height) {
+                                neighborIndex = grid[neighborY * width + neighborX];
+                                if (neighborIndex !== -1 && neighborIndex < points.length) {
+                                    neighborColor = points[neighborIndex]?.color || "unknown";
+                                }
+                            }
+                            
+                            const edgeKey = getEdgeKey(x1, y1, x2, y2);
+                            
+                            // Determine if we should draw this edge
+                            let shouldDraw = false;
+                            
+                            // Edge of the grid or boundary between cells
+                            if (neighborIndex === -1 || neighborIndex !== index) {
+                                if (currentBorderMode === 'all') {
+                                    shouldDraw = true;
+                                } else if (currentBorderMode === 'none') {
+                                    shouldDraw = false;
+                                } else if (currentBorderMode === 'color') {
+                                    // Draw if this is a grid edge or cells have different colors
+                                    shouldDraw = (neighborIndex === -1) || (cellColor !== neighborColor);
+                                }
+                            }
+                            
+                            if (shouldDraw) {
+                                // Store in edge map (might override existing entry if shared between cells)
+                                edgeMap.set(edgeKey, { x1, y1, x2, y2 });
+                            }
+                        }
+                    }
+                }
+                
+                return edgeMap;
+            }
+            
+            // Note: This function is no longer used as we switched to a unified grid-based approach
+            // Left here for reference in case we need to revert
+            function renderEuclideanVoronoi(includePreview = false) {
+                // This function is deprecated and now just calls the grid-based renderer for consistency
+                renderGridVoronoi(includePreview);
+            }
+            
+            // Unified Voronoi rendering for all distance metrics
+            function renderGridVoronoi(includePreview = false) {
+                const gridVoronoi = computeVoronoiGrid(includePreview);
+                if (!gridVoronoi) return;
+                
+                const { grid, width, height, resolution, points: pointsToRender } = gridVoronoi;
+                const previewIndex = includePreview && previewPoint ? pointsToRender.length - 1 : -1;
+                
+                // STEP 1: Identify preview cells first if needed
+                let previewCells = [];
+                if (includePreview && previewPoint) {
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) {
+                            if (grid[y * width + x] === previewIndex) {
+                                previewCells.push({x, y});
+                            }
+                        }
+                    }
+                }
+                
+                // STEP 2: Fill all cells with their colors (except preview cells)
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const index = grid[y * width + x];
+                        // Skip preview cells - we'll draw them separately
+                        if (index >= 0 && index < pointsToRender.length && index !== previewIndex) {
+                            ctx.fillStyle = pointsToRender[index].color;
+                            ctx.fillRect(x * resolution, y * resolution, resolution, resolution);
+                        }
+                    }
+                }
+                
+                // STEP 3: Draw the preview cell as a single shape if it exists
+                if (previewCells.length > 0) {
+                    // First determine the boundaries of the preview
+                    let minX = width, minY = height, maxX = 0, maxY = 0;
+                    for (const cell of previewCells) {
+                        minX = Math.min(minX, cell.x);
+                        minY = Math.min(minY, cell.y);
+                        maxX = Math.max(maxX, cell.x);
+                        maxY = Math.max(maxY, cell.y);
+                    }
+                    
+                    // Create a lookup map for quick checks
+                    const previewCellMap = new Map();
+                    for (const {x, y} of previewCells) {
+                        previewCellMap.set(`${x},${y}`, true);
+                    }
+                    
+                    // Function to check if a cell is part of the preview
+                    const isPreviewCell = (x, y) => previewCellMap.has(`${x},${y}`);
+                    
+                    // Draw the preview cells with a uniform fill
+                    ctx.fillStyle = isValidPlacement ? selectedColor + '80' : '#ff000040';
+                    for (const {x, y} of previewCells) {
+                        ctx.fillRect(x * resolution, y * resolution, resolution, resolution);
+                    }
+                    
+                    // Draw the outline of the preview
+                    if (currentBorderMode !== 'none') {
+                        ctx.strokeStyle = isValidPlacement ? '#333' : '#ff0000';
+                        ctx.lineWidth = 1;
+                        
+                        // Offset to position lines at cell borders
+                        const halfLine = 0.5;
+                        
+                        // Check and draw each edge of each preview cell, but only if it's an outer edge
+                        for (const {x, y} of previewCells) {
+                            // Check top edge
+                            if (!isPreviewCell(x, y-1)) {
+                                ctx.beginPath();
+                                ctx.moveTo(x * resolution + halfLine, y * resolution + halfLine);
+                                ctx.lineTo((x+1) * resolution + halfLine, y * resolution + halfLine);
+                                ctx.stroke();
+                            }
+                            
+                            // Check right edge
+                            if (!isPreviewCell(x+1, y)) {
+                                ctx.beginPath();
+                                ctx.moveTo((x+1) * resolution + halfLine, y * resolution + halfLine);
+                                ctx.lineTo((x+1) * resolution + halfLine, (y+1) * resolution + halfLine);
+                                ctx.stroke();
+                            }
+                            
+                            // Check bottom edge
+                            if (!isPreviewCell(x, y+1)) {
+                                ctx.beginPath();
+                                ctx.moveTo(x * resolution + halfLine, (y+1) * resolution + halfLine);
+                                ctx.lineTo((x+1) * resolution + halfLine, (y+1) * resolution + halfLine);
+                                ctx.stroke();
+                            }
+                            
+                            // Check left edge
+                            if (!isPreviewCell(x-1, y)) {
+                                ctx.beginPath();
+                                ctx.moveTo(x * resolution + halfLine, y * resolution + halfLine);
+                                ctx.lineTo(x * resolution + halfLine, (y+1) * resolution + halfLine);
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+                
+                // STEP 4: Draw the borders using the unified edge detection for non-preview cells
+                if (currentBorderMode !== 'none') {
+                    // Create a map of all edges that should be drawn
+                    const edgeMap = createBorderEdgeMap(grid, width, height, pointsToRender);
+                    
+                    // Draw all the border edges
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 1;
+                    
+                    for (const { x1, y1, x2, y2 } of edgeMap.values()) {
+                        // Skip edges that are part of the preview cell boundary
+                        // as we've already drawn those separately
+                        if (includePreview && previewPoint) {
+                            let isPreviewEdge = false;
+                            const midX = (x1 + x2) / 2;
+                            const midY = (y1 + y2) / 2;
+                            
+                            // Check midpoint of this edge - if it's between a preview cell and another cell/edge
+                            // then we should skip it because we've already drawn it in the preview section
+                            const midGridX = Math.floor(midX);
+                            const midGridY = Math.floor(midY);
+                            
+                            // Check adjacent cells
+                            const directions = [
+                                {dx: 0, dy: 0},    // current
+                                {dx: 0, dy: -1},   // above
+                                {dx: 1, dy: 0},    // right
+                                {dx: 0, dy: 1},    // below
+                                {dx: -1, dy: 0}    // left
+                            ];
+                            
+                            let hasPreview = false;
+                            let hasNonPreview = false;
+                            
+                            for (const {dx, dy} of directions) {
+                                const checkX = midGridX + dx;
+                                const checkY = midGridY + dy;
+                                
+                                if (checkX >= 0 && checkX < width && checkY >= 0 && checkY < height) {
+                                    const cellIndex = grid[checkY * width + checkX];
+                                    if (cellIndex === previewIndex) {
+                                        hasPreview = true;
+                                    } else if (cellIndex !== -1) {
+                                        hasNonPreview = true;
+                                    }
+                                }
+                            }
+                            
+                            // If this edge is between preview and non-preview, skip it
+                            if (hasPreview && hasNonPreview) {
+                                continue;
+                            }
+                        }
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(x1 * resolution, y1 * resolution);
+                        ctx.lineTo(x2 * resolution, y2 * resolution);
+                        ctx.stroke();
+                    }
+                }
+                
+                // Draw points and weights if needed
+                if (showDots || (useWeightedCells && showWeights)) {
+                    for (let i = 0; i < points.length; i++) {
+                        const point = points[i];
+                        
+                        // Draw center dot if enabled
+                        if (showDots) {
+                            ctx.beginPath();
+                            ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                            
+                            // Highlight the point being moved
+                            if (isMovingPoint && i === movingPointIndex) {
+                                ctx.fillStyle = '#00ff00'; // Green for the moving point
+                            } else {
+                                ctx.fillStyle = '#000';
+                            }
+                            
+                            ctx.fill();
+                        }
+                        
+                        // Draw weight value if weighted cells and weights display are enabled
+                        if (useWeightedCells && showWeights) {
+                            const weightText = (point.weight >= 0 ? '+' : '') + point.weight.toFixed(1) + '%';
+                            ctx.font = '12px Arial';
+                            ctx.fillStyle = (point.weight >= 0) ? 'darkgreen' : 'darkred';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(weightText, point.x, point.y + 15);
+                        }
+                    }
+                    
+                    // Draw preview point if active
+                    if (isPreviewActive && previewPoint && showDots) {
+                        ctx.beginPath();
+                        ctx.arc(previewPoint.x, previewPoint.y, 4, 0, Math.PI * 2);
+                        ctx.fillStyle = isValidPlacement ? '#000' : '#ff0000';
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            // Function to render the Voronoi diagram
+            function renderVoronoi() {
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (points.length === 0 && (!isPreviewActive || !previewPoint)) return;
+                
+                // Use grid-based rendering for all modes for consistency
+                renderGridVoronoi(isPreviewActive && previewPoint);
+            }
+            
+            // Start the preview
+            function startPreview(x, y) {
+                // Set interaction state to true for lower resolution during interaction
+                isInteracting = true;
+                
+                if (currentTool === 'addPoint') {
+                    // Check if we're too close to an existing cell
+                    const tooClose = isTooClose(x, y);
+                    
+                    if (tooClose) {
+                        // Find which cell we're close to and paint it instead
+                        const cellIndex = findCellUnderCursor(x, y);
+                        if (cellIndex !== -1 && cellIndex < points.length) {
+                            // Change the cell's color to the currently selected color
+                            points[cellIndex].color = selectedColor;
+                            
+                            // Just render without preview since we're painting instead
+                            renderVoronoi();
+                            return;
+                        }
+                    }
+                    
+                    // Normal preview if not too close
+                    isPreviewActive = true;
+                    isValidPlacement = !tooClose;
+                    previewPoint = {
+                        x: x,
+                        y: y,
+                        color: selectedColor,
+                        weight: 0 // Default weight for preview
+                    };
+                    
+                    // Force cache invalidation to ensure preview updates
+                    gridCache = null;
+                    euclideanCache = null;
+                    renderVoronoi();
+                }
+            }
+            
+            // Update the preview or moving point
+            function updatePreview(x, y) {
+                // Ensure interaction state is true during any update
+                isInteracting = true;
+                
+                if (isMovingPoint && movingPointIndex !== -1) {
+                    // Update position of the moving point
+                    const isValid = !isTooClose(x, y, movingPointIndex);
+                    if (isValid) {
+                        points[movingPointIndex].x = x;
+                        points[movingPointIndex].y = y;
+                        
+                        // Force cache invalidation to ensure the move is properly rendered
+                        gridCache = null;
+                        euclideanCache = null;
+                        renderVoronoi();
+                    }
+                } else if (isPreviewActive && currentTool === 'addPoint') {
+                    // Update preview point
+                    isValidPlacement = !isTooClose(x, y);
+                    previewPoint.x = x;
+                    previewPoint.y = y;
+                    
+                    // Force cache invalidation to ensure preview updates
+                    gridCache = null;
+                    euclideanCache = null;
+                    renderVoronoi();
+                } else if (isPainting && currentTool === 'paint') {
+                    // Handle continuous painting during drag
+                    handlePaint(x, y);
+                }
+            }
+            
+            // Helper function to end all interactive states
+            function endAllInteractions() {
+                if (isMovingPoint) {
+                    isMovingPoint = false;
+                    movingPointIndex = -1;
+                }
+                
+                if (isPreviewActive) {
+                    // If we were placing a valid point, add it
+                    if (isValidPlacement) {
+                        // Add the preview point to the real points
+                        const newPoint = {
+                            x: previewPoint.x,
+                            y: previewPoint.y,
+                            color: selectedColor,
+                            weight: 0 // Default weight for new points
+                        };
+                        
+                        // Randomize weight if using weighted cells
+                        if (useWeightedCells) {
+                            newPoint.weight = (Math.random() * 2 - 1) * maxWeightRangeValue;
+                        }
+                        
+                        points.push(newPoint);
+                    }
+                    
+                    isPreviewActive = false;
+                    previewPoint = null;
+                }
+                
+                isPainting = false;
+                lastPaintedCellIndex = -1;
+                
+                // Schedule a high-resolution render
+                setTimeout(finalRender, 50);
+                
+                // Force a quick refresh first
+                isInteracting = true;
+                renderVoronoi();
+            }
+            
+            // Perform a final high-resolution render after interaction ends
+            function finalRender() {
+                // Set to non-interacting for high quality
+                isInteracting = false;
+                renderVoronoi();
+            }
+            
+            // Handle paint tool
+            function handlePaint(x, y) {
+                // Set interaction state to true for painting
+                isInteracting = true;
+                
+                if (currentTool === 'paint' && points.length > 0) {
+                    // Find which cell was clicked/dragged over
+                    const index = findCellUnderCursor(x, y);
+                    
+                    // Only color if it's a valid cell and we haven't just painted it
+                    if (index !== -1 && index < points.length && index !== lastPaintedCellIndex) {
+                        points[index].color = selectedColor;
+                        lastPaintedCellIndex = index; // Prevent painting the same cell repeatedly
+                        renderVoronoi();
+                    }
+                }
+            }
+            
+            // Mouse events for preview and interaction
+            canvas.addEventListener('mousedown', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Right mouse button - move cell
+                if (e.button === 2) {
+                    if (points.length > 0) {
+                        const cellIndex = findCellUnderCursor(x, y);
+                        if (cellIndex !== -1 && cellIndex < points.length) {
+                            // Start moving the cell
+                            isMovingPoint = true;
+                            movingPointIndex = cellIndex;
+                            isInteracting = true;
+                            
+                            // Update position immediately to provide feedback
+                            points[cellIndex].x = x;
+                            points[cellIndex].y = y;
+                            
+                            // Force cache invalidation to ensure preview updates
+                            gridCache = null;
+                            euclideanCache = null;
+                            renderVoronoi();
+                        }
+                    }
+                    return;
+                }
+                
+                // Left mouse button
+                else if (e.button === 0) {
+                    // Shift-click: pick the color of the hovered cell
+                    if (e.shiftKey) {
+                        const cellIndex = findCellUnderCursor(x, y);
+                        if (cellIndex !== -1 && cellIndex < points.length) {
+                            // Get the color of the cell
+                            selectedColor = points[cellIndex].color;
+                            
+                            // Update the color picker UI
+                            colorOptions.forEach(option => {
+                                if (option.dataset.color === selectedColor) {
+                                    colorOptions.forEach(opt => opt.classList.remove('selected'));
+                                    option.classList.add('selected');
+                                }
+                            });
+                        }
+                        return;
+                    } 
+                    // Alt-click: delete the hovered cell
+                    else if (e.altKey) {
+                        const cellIndex = findCellUnderCursor(x, y);
+                        if (cellIndex !== -1 && cellIndex < points.length) {
+                            // Remove the point that creates this cell
+                            points.splice(cellIndex, 1);
+                            
+                            // Force cache invalidation and redraw
+                            gridCache = null;
+                            euclideanCache = null;
+                            renderVoronoi();
+                        }
+                        return;
+                    }
+                    // Normal behavior
+                    else if (currentTool === 'addPoint') {
+                        startPreview(x, y);
+                    } else if (currentTool === 'paint') {
+                        isPainting = true;
+                        lastPaintedCellIndex = -1;
+                        handlePaint(x, y);
+                    }
+                }
+            });
+            
+            canvas.addEventListener('mouseup', function(e) {
+                // Handle all button releases
+                if (isMovingPoint) {
+                    // End moving point
+                    isMovingPoint = false;
+                    movingPointIndex = -1;
+                    
+                    // Schedule a high-resolution render after interaction
+                    setTimeout(finalRender, 50);
+                } else if (isPreviewActive && e.button === 0 && currentTool === 'addPoint') {
+                    // End adding point (only for left button)
+                    if (isValidPlacement) {
+                        // Add the preview point to the real points
+                        const newPoint = {
+                            x: previewPoint.x,
+                            y: previewPoint.y,
+                            color: selectedColor,
+                            weight: 0 // Default weight for new points
+                        };
+                        
+                        // Randomize weight if using weighted cells
+                        if (useWeightedCells) {
+                            newPoint.weight = (Math.random() * 2 - 1) * maxWeightRangeValue;
+                        }
+                        
+                        points.push(newPoint);
+                    }
+                    
+                    // Reset preview state
+                    isPreviewActive = false;
+                    previewPoint = null;
+                    
+                    // Schedule a high-resolution render
+                    setTimeout(finalRender, 50);
+                }
+                
+                // End painting
+                isPainting = false;
+                lastPaintedCellIndex = -1;
+                
+                // Ensure we render at least once after interaction
+                if (e.button === 0 || e.button === 2) {
+                    // Intermediate render with interactive resolution
+                    isInteracting = true;
+                    renderVoronoi();
+                }
+            });
+            
+            canvas.addEventListener('mousemove', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Only respond to mouse move if we're actively doing something
+                if (isMovingPoint || isPreviewActive || isPainting) {
+                    updatePreview(x, y);
+                }
+            });
+            
+            canvas.addEventListener('mouseleave', function() {
+                // End all interactions when mouse leaves canvas
+                endAllInteractions();
+            });
+            
+            // Prevent context menu on right-click
+            canvas.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+            });
+            
+            // Add wheel event listener for weight adjustment
+            canvas.addEventListener('wheel', function(e) {
+                e.preventDefault(); // Prevent scrolling the page
+                
+                if (useWeightedCells && points.length > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    // Find which cell is under the cursor
+                    const cellIndex = findCellUnderCursor(x, y);
+                    if (cellIndex !== -1 && cellIndex < points.length) {
+                        // Adjust weight based on scroll direction
+                        const delta = Math.sign(e.deltaY) * -1; // -1 for scroll down, 1 for scroll up
+                        points[cellIndex].weight += delta * 2; // Adjust by 2% per tick
+                        
+                        // Clamp weight to the range defined by maxWeightRangeValue
+                        points[cellIndex].weight = Math.max(
+                            -maxWeightRangeValue,
+                            Math.min(maxWeightRangeValue, points[cellIndex].weight)
+                        );
+                        
+                        // Force cache invalidation and redraw
+                        isInteracting = true;
+                        gridCache = null;
+                        euclideanCache = null;
+                        renderVoronoi();
+                        
+                        // Schedule a high-res render after a short delay
+                        setTimeout(finalRender, 50);
+                    }
+                }
+            }, { passive: false });
+            
+            // Touch events for preview (mobile)
+            canvas.addEventListener('touchstart', function(e) {
+                e.preventDefault(); // Prevent scrolling
+                if (e.touches.length > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    const x = touch.clientX - rect.left;
+                    const y = touch.clientY - rect.top;
+                    
+                    if (currentTool === 'addPoint') {
+                        startPreview(x, y);
+                    } else if (currentTool === 'paint') {
+                        isPainting = true;
+                        lastPaintedCellIndex = -1;
+                        handlePaint(x, y);
+                    }
+                }
+            }, { passive: false });
+            
+            canvas.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                if (e.touches.length > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    const x = touch.clientX - rect.left;
+                    const y = touch.clientY - rect.top;
+                    
+                    // Only update if we're doing something interactive
+                    if (isMovingPoint || isPreviewActive || isPainting) {
+                        updatePreview(x, y);
+                    }
+                }
+            }, { passive: false });
+            
+            canvas.addEventListener('touchend', function() {
+                endAllInteractions();
+            });
+            
+            canvas.addEventListener('touchcancel', function() {
+                endAllInteractions();
+            });
+            
+            // Reset button
+            resetBtn.addEventListener('click', function() {
+                points = [];
+                isPreviewActive = false;
+                previewPoint = null;
+                isMovingPoint = false;
+                movingPointIndex = -1;
+                renderVoronoi();
+            });
+            
+            // Randomize button
+            randomizeBtn.addEventListener('click', function() {
+                const numPoints = 15 + Math.floor(Math.random() * 10); // 15-25 points
+                points = [];
+                
+                const colors = Array.from(colorOptions).map(opt => opt.dataset.color);
+                
+                // Create random points with minimum distance requirement
+                let attempts = 0;
+                const maxAttempts = 200;
+                
+                while (points.length < numPoints && attempts < maxAttempts) {
+                    const x = Math.random() * canvas.width;
+                    const y = Math.random() * canvas.height;
+                    
+                    if (!isTooClose(x, y)) {
+                        const color = colors[Math.floor(Math.random() * colors.length)];
+                        const weight = useWeightedCells ? (Math.random() * 2 - 1) * maxWeightRangeValue : 0;
+                        
+                        points.push({ 
+                            x, 
+                            y, 
+                            color,
+                            weight
+                        });
+                    }
+                    
+                    attempts++;
+                }
+                
+                renderVoronoi();
+            });
+            
+            // Undo button
+            undoBtn.addEventListener('click', function() {
+                points.pop();
+                renderVoronoi();
+            });
+            
+            // Set initial cursor
+            canvas.style.cursor = 'crosshair';
+            
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Only handle shortcuts when not in an input field
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                
+                // Convert to lowercase to make case-insensitive
+                const key = e.key.toLowerCase();
+                
+                // 'b' for Paint tool (brush)
+                if (key === 'b') {
+                    currentTool = 'paint';
+                    paintToolBtn.classList.add('active');
+                    addPointToolBtn.classList.remove('active');
+                    canvas.style.cursor = 'pointer';
+                }
+                // 'd' for Draw tool (add point)
+                else if (key === 'd') {
+                    currentTool = 'addPoint';
+                    addPointToolBtn.classList.add('active');
+                    paintToolBtn.classList.remove('active');
+                    canvas.style.cursor = 'crosshair';
+                }
+            });
+            
+            // Initial render
+            renderVoronoi();
+        });
+    </script>
+</body>
+</html>
